@@ -542,9 +542,10 @@ final class PaperTextView: NSTextView {
             let content = line.content
             switch kind {
             case .divider:
+                // Full-bleed: edge to edge of the paper, not just the text column.
                 let y = content.midY.rounded()
-                NSColor.black.withAlphaComponent(0.4).setFill()
-                NSRect(x: content.minX, y: y - 0.5, width: content.width, height: 1.5).fill()
+                NSColor(red: 0xCA / 255, green: 0xD5 / 255, blue: 0xDA / 255, alpha: 1).setFill()
+                NSRect(x: bounds.minX, y: y - 0.75, width: bounds.width, height: 1.5).fill()
             case .callout:
                 let box = NSRect(x: content.minX, y: content.minY - 8, width: content.width, height: content.height + 16)
                 NSColor.black.withAlphaComponent(0.04).setFill()
