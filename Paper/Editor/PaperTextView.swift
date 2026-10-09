@@ -391,7 +391,24 @@ final class PaperTextView: NSTextView {
                                        owner: self, userInfo: ["paper": true]))
     }
 
+    private func isOverToolbar(_ event: NSEvent) -> Bool {
+        guard !formatToolbar.isHidden, formatToolbar.superview === self else { return false }
+        return formatToolbar.frame.contains(convert(event.locationInWindow, from: nil))
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        if isOverToolbar(event) {
+            NSCursor.pointingHand.set()
+            return
+        }
+        super.cursorUpdate(with: event)
+    }
+
     override func mouseMoved(with event: NSEvent) {
+        if isOverToolbar(event) {
+            NSCursor.pointingHand.set()
+            return
+        }
         super.mouseMoved(with: event)
         let point = convert(event.locationInWindow, from: nil)
         let line = lineIndex(atPoint: point)
@@ -652,10 +669,36 @@ final class PaperTextView: NSTextView {
     }
 }
 
+/// Borderless toolbar button with a pointer cursor and a soft background on hover.
+final class ToolbarButton: NSButton {
+    private var hoverArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero,
+                                  options: [.mouseEnteredAndExited, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { setHovered(isEnabled) }
+    override func mouseExited(with event: NSEvent) { setHovered(false) }
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+
+    private func setHovered(_ hovered: Bool) {
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        layer?.backgroundColor = hovered ? NSColor.black.withAlphaComponent(0.06).cgColor : NSColor.clear.cgColor
+    }
+}
+
 /// Floating bar shown above selected text: turn the block into another type, or style the text.
 final class FormatToolbar: NSView {
     private weak var textView: PaperTextView?
-    private let turnIntoButton = NSButton(title: "Text", target: nil, action: nil)
+    private let turnIntoButton = ToolbarButton(title: "Text", target: nil, action: nil)
     private let stack = NSStackView()
 
     private static let blockTypes: [(String, Selector)] = [
@@ -675,7 +718,7 @@ final class FormatToolbar: NSView {
         isHidden = true
         wantsLayer = true
         layer?.backgroundColor = NSColor.white.cgColor
-        layer?.cornerRadius = 8
+        layer?.cornerRadius = 10
         layer?.borderWidth = 1
         layer?.borderColor = NSColor.black.withAlphaComponent(0.1).cgColor
         layer?.shadowColor = NSColor.black.cgColor
@@ -685,20 +728,21 @@ final class FormatToolbar: NSView {
         layer?.masksToBounds = false
 
         turnIntoButton.isBordered = false
-        turnIntoButton.font = .systemFont(ofSize: 13, weight: .medium)
+        turnIntoButton.font = .systemFont(ofSize: 14, weight: .medium)
         turnIntoButton.contentTintColor = NSColor.black.withAlphaComponent(0.8)
         turnIntoButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 9, weight: .semibold))
+            .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
         turnIntoButton.imagePosition = .imageTrailing
         turnIntoButton.refusesFirstResponder = true
         turnIntoButton.target = self
         turnIntoButton.action = #selector(showTurnIntoMenu)
         turnIntoButton.toolTip = "Turn into"
-        turnIntoButton.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        turnIntoButton.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        turnIntoButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 96).isActive = true
 
         stack.orientation = .horizontal
-        stack.spacing = 2
-        stack.edgeInsets = NSEdgeInsets(top: 2, left: 8, bottom: 2, right: 4)
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 6, bottom: 4, right: 6)
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(turnIntoButton)
         stack.addArrangedSubview(separator())
@@ -731,14 +775,14 @@ final class FormatToolbar: NSView {
 
     private func iconButton(_ symbol: String, _ tip: String, _ action: Selector) -> NSButton {
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)?
-            .withSymbolConfiguration(.init(pointSize: 13, weight: .medium)) ?? NSImage()
-        let button = NSButton(image: image, target: textView, action: action)
+            .withSymbolConfiguration(.init(pointSize: 15, weight: .medium)) ?? NSImage()
+        let button = ToolbarButton(image: image, target: textView, action: action)
         button.isBordered = false
         button.contentTintColor = NSColor.black.withAlphaComponent(0.75)
         button.toolTip = tip
         button.refusesFirstResponder = true
-        button.widthAnchor.constraint(equalToConstant: 28).isActive = true
-        button.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        button.widthAnchor.constraint(equalToConstant: 32).isActive = true
+        button.heightAnchor.constraint(equalToConstant: 32).isActive = true
         return button
     }
 
