@@ -38,70 +38,52 @@ enum PaperData {
 final class PaperStore {
     private let context: ModelContext
     private(set) var documents: [Document] = []
-    var currentID: PersistentIdentifier?
+    /// Set when a paper should open in a window from outside the UI (Siri, Shortcuts).
+    var pendingOpen: PersistentIdentifier?
 
     init(context: ModelContext) {
         self.context = context
         reload()
-        if documents.isEmpty {
-            newPaper()
-        } else {
-            currentID = documents.first?.persistentModelID
-        }
     }
 
-    var current: Document? {
-        documents.first { $0.persistentModelID == currentID } ?? documents.first
+    func document(for id: PersistentIdentifier?) -> Document? {
+        guard let id else { return nil }
+        return documents.first { $0.persistentModelID == id }
     }
 
-    func newPaper() {
-        let doc = Document(paperStyle: current?.paperStyle ?? .dotted)
+    /// The paper a window should show when none was chosen: the newest one, or a fresh paper.
+    func defaultPaperID() -> PersistentIdentifier {
+        documents.first?.persistentModelID ?? newPaper()
+    }
+
+    @discardableResult
+    func newPaper(style: PaperStyle = .dotted) -> PersistentIdentifier {
+        let doc = Document(paperStyle: style)
         context.insert(doc)
         try? context.save()
         reload()
-        currentID = doc.persistentModelID
+        return doc.persistentModelID
     }
 
-    /// Puts text on a new paper on top, replacing the current paper if it is blank.
-    func addPaper(with text: String) {
-        let style = current?.paperStyle ?? .dotted
-        if let blank = current, blank.markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            context.delete(blank)
-        }
-        let doc = Document(content: text, paperStyle: style)
+    @discardableResult
+    func addPaper(with text: String) -> PersistentIdentifier {
+        let doc = Document(content: text, paperStyle: documents.first?.paperStyle ?? .dotted)
         context.insert(doc)
         try? context.save()
         reload()
-        currentID = doc.persistentModelID
+        pendingOpen = doc.persistentModelID
+        return doc.persistentModelID
     }
 
-    func nextPaper() { step(by: 1) }
-    func previousPaper() { step(by: -1) }
-
-    func setStyle(_ style: PaperStyle) {
-        current?.paperStyle = style
+    func setStyle(_ style: PaperStyle, for doc: Document) {
+        doc.paperStyle = style
         try? context.save()
     }
 
-    func deleteCurrentPaper() {
-        guard let doc = current else { return }
-        let index = documents.firstIndex { $0.persistentModelID == doc.persistentModelID } ?? 0
+    func delete(_ doc: Document) {
         context.delete(doc)
         try? context.save()
         reload()
-        if documents.isEmpty {
-            newPaper()
-        } else {
-            currentID = documents[min(index, documents.count - 1)].persistentModelID
-        }
-    }
-
-    private func step(by offset: Int) {
-        guard documents.count > 1, let doc = current,
-              let index = documents.firstIndex(where: { $0.persistentModelID == doc.persistentModelID })
-        else { return }
-        let next = (index + offset + documents.count) % documents.count
-        currentID = documents[next].persistentModelID
     }
 
     private func reload() {

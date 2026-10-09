@@ -160,6 +160,8 @@ enum MarkdownStyler {
     private static let italic = try! NSRegularExpression(pattern: "(?<![*\\w])\\*(?=[^*\\s])(.+?)(?<=[^*\\s])\\*(?![*\\w])")
     private static let code = try! NSRegularExpression(pattern: "`([^`\\n]+)`")
     private static let strike = try! NSRegularExpression(pattern: "~~(?=\\S)(.+?)(?<=\\S)~~")
+    private static let highlight = try! NSRegularExpression(pattern: "==(?=\\S)(.+?)(?<=\\S)==")
+    static let highlightColor = NSColor(red: 1.0, green: 0.88, blue: 0.35, alpha: 0.55)
 
     private static func styleInline(_ storage: NSTextStorage, range: NSRange, baseFont: NSFont) {
         let text = storage.string
@@ -191,6 +193,9 @@ enum MarkdownStyler {
         }
         apply(strike, markerLength: 2) { inner in
             storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: inner)
+        }
+        apply(highlight, markerLength: 2) { inner in
+            storage.addAttribute(.backgroundColor, value: highlightColor, range: inner)
         }
         apply(code, markerLength: 1) { inner in
             storage.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: baseFont.pointSize - 1, weight: .regular), range: inner)

@@ -79,9 +79,10 @@ struct MarkdownEditor: NSViewRepresentable {
     let document: Document
     let style: PaperStyle
     let store: PaperStore
+    let actions: PaperActions
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(document: document, store: store)
+        Coordinator(document: document, store: store, actions: actions)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -151,10 +152,12 @@ struct MarkdownEditor: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         let document: Document
         let store: PaperStore
+        let actions: PaperActions
 
-        init(document: Document, store: PaperStore) {
+        init(document: Document, store: PaperStore, actions: PaperActions) {
             self.document = document
             self.store = store
+            self.actions = actions
         }
 
         func textDidChange(_ notification: Notification) {
@@ -166,17 +169,14 @@ struct MarkdownEditor: NSViewRepresentable {
         func paperMenuItems() -> [NSMenuItem] {
             var items: [NSMenuItem] = []
             items.append(item("New paper", #selector(newPaper)))
-            if store.documents.count > 1 {
-                items.append(item("Next paper", #selector(nextPaper)))
-                items.append(item("Previous paper", #selector(previousPaper)))
-            }
+            items.append(item("View all papers", #selector(viewAllPapers)))
 
             let styleItem = NSMenuItem(title: "Paper style", action: nil, keyEquivalent: "")
             let styleMenu = NSMenu()
             for (index, style) in PaperStyle.allCases.enumerated() {
                 let entry = item(style.label, #selector(setStyle(_:)))
                 entry.tag = index
-                entry.state = store.current?.paperStyle == style ? .on : .off
+                entry.state = document.paperStyle == style ? .on : .off
                 styleMenu.addItem(entry)
             }
             styleItem.submenu = styleMenu
@@ -192,12 +192,11 @@ struct MarkdownEditor: NSViewRepresentable {
             return item
         }
 
-        @objc private func newPaper() { store.newPaper() }
-        @objc private func nextPaper() { store.nextPaper() }
-        @objc private func previousPaper() { store.previousPaper() }
-        @objc private func deletePaper() { store.deleteCurrentPaper() }
+        @objc private func newPaper() { actions.newPaper() }
+        @objc private func viewAllPapers() { actions.viewAllPapers() }
+        @objc private func deletePaper() { actions.delete() }
         @objc private func setStyle(_ sender: NSMenuItem) {
-            store.setStyle(PaperStyle.allCases[sender.tag])
+            store.setStyle(PaperStyle.allCases[sender.tag], for: document)
         }
     }
 }

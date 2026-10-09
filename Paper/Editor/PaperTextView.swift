@@ -191,6 +191,7 @@ final class PaperTextView: NSTextView {
     @objc func toggleItalicMarkdown(_ sender: Any?) { toggleWrap("*") }
     @objc func toggleCodeMarkdown(_ sender: Any?) { toggleWrap("`") }
     @objc func toggleStrikeMarkdown(_ sender: Any?) { toggleWrap("~~") }
+    @objc func toggleHighlightMarkdown(_ sender: Any?) { toggleWrap("==") }
 
     private func toggleWrap(_ marker: String) {
         let sel = selectedRange()
@@ -305,6 +306,20 @@ final class PaperTextView: NSTextView {
         return NSRect(x: rect.minX - handleWidth - 10, y: rect.minY, width: handleWidth, height: height)
     }
 
+    private func plusRect(forLine index: Int, ranges: [NSRange]) -> NSRect? {
+        guard let handle = handleRect(forLine: index, ranges: ranges) else { return nil }
+        return NSRect(x: handle.minX - handleWidth - 2, y: handle.minY, width: handleWidth, height: handle.height)
+    }
+
+    /// Adds an empty block below `line` and opens the block menu on it.
+    private func insertBlock(below line: Int, ranges: [NSRange]) {
+        let location = NSMaxRange(ranges[line])
+        window?.makeFirstResponder(self)
+        replace(NSRange(location: location, length: 0), with: "\n/", caret: location + 2)
+        let lineStart = location + 1
+        DispatchQueue.main.async { [weak self] in self?.showSlashMenu(lineStart: lineStart) }
+    }
+
     // MARK: Mouse
 
     override func updateTrackingAreas() {
@@ -341,7 +356,11 @@ final class PaperTextView: NSTextView {
 
         let ranges = lineRanges()
         let line = lineIndex(atPoint: point)
-        if let handle = handleRect(forLine: line, ranges: ranges)?.insetBy(dx: -6, dy: -2), handle.contains(point) {
+        if let plus = plusRect(forLine: line, ranges: ranges)?.insetBy(dx: -2, dy: -2), plus.contains(point) {
+            insertBlock(below: line, ranges: ranges)
+            return
+        }
+        if let handle = handleRect(forLine: line, ranges: ranges)?.insetBy(dx: -2, dy: -2), handle.contains(point) {
             dragBlock(from: line, ranges: ranges)
             return
         }
@@ -450,6 +469,15 @@ final class PaperTextView: NSTextView {
             let width = (textContainer?.size.width ?? bounds.width)
             NSColor.controlAccentColor.setFill()
             NSBezierPath(roundedRect: NSRect(x: x, y: y - 1, width: width, height: 2), xRadius: 1, yRadius: 1).fill()
+        }
+
+        if !isDraggingBlock, let line = hoveredLine, let plus = plusRect(forLine: line, ranges: ranges) {
+            NSColor.black.withAlphaComponent(0.3).setFill()
+            let arm: CGFloat = 5
+            NSBezierPath(roundedRect: NSRect(x: plus.midX - arm, y: plus.midY - 0.75, width: arm * 2, height: 1.5),
+                         xRadius: 0.75, yRadius: 0.75).fill()
+            NSBezierPath(roundedRect: NSRect(x: plus.midX - 0.75, y: plus.midY - arm, width: 1.5, height: arm * 2),
+                         xRadius: 0.75, yRadius: 0.75).fill()
         }
 
         if !isDraggingBlock, let line = hoveredLine, let handle = handleRect(forLine: line, ranges: ranges) {

@@ -21,15 +21,14 @@ struct PaperMenuBarMenu: View {
         .keyboardShortcut("a", modifiers: [.command, .shift])
 
         Button("New paper") {
-            store.newPaper()
             NSApp.activate()
-            openWindow(id: PaperWindowID.main)
+            openWindow(value: store.newPaper())
         }
         .keyboardShortcut("n")
 
         Button("Show Paper") {
             NSApp.activate()
-            openWindow(id: PaperWindowID.main)
+            openWindow(value: store.defaultPaperID())
         }
 
         Divider()
@@ -81,17 +80,11 @@ struct AllPapersView: View {
 
     private func card(for doc: Document) -> some View {
         let id = PersistentIdentifierBox(doc.persistentModelID)
-        let isCurrent = store.current?.persistentModelID == doc.persistentModelID
         let isHovered = hovered == id
 
         return VStack(spacing: 10) {
             PaperThumbnail(document: doc)
                 .frame(width: Self.cardSize.width, height: Self.cardSize.height)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.accentColor, lineWidth: isCurrent ? 3 : 0)
-                        .padding(-4)
-                )
                 .scaleEffect(isHovered ? 1.03 : 1)
                 .shadow(color: .black.opacity(isHovered ? 0.18 : 0.1), radius: isHovered ? 10 : 5, y: 3)
 
@@ -112,18 +105,14 @@ struct AllPapersView: View {
         .onTapGesture { open(doc) }
         .contextMenu {
             Button("Open") { open(doc) }
-            Button("Delete paper", role: .destructive) {
-                store.currentID = doc.persistentModelID
-                store.deleteCurrentPaper()
-            }
+            Button("Delete paper", role: .destructive) { store.delete(doc) }
         }
     }
 
     private func open(_ doc: Document) {
-        store.currentID = doc.persistentModelID
         dismissWindow(id: PaperWindowID.allPapers)
         NSApp.activate()
-        openWindow(id: PaperWindowID.main)
+        openWindow(value: doc.persistentModelID)
     }
 }
 
@@ -202,7 +191,7 @@ struct PaperThumbnail: View {
                 let info = MarkdownStyler.parse(text, isFirst: false)
                 if info.kind == .divider { return "—" }
                 var body = String((text as NSString).substring(from: min(info.markerLength, (text as NSString).length)))
-                for marker in ["**", "~~", "`", "*"] {
+                for marker in ["**", "~~", "==", "`", "*"] {
                     body = body.replacingOccurrences(of: marker, with: "")
                 }
                 switch info.kind {

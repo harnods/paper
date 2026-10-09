@@ -8,8 +8,8 @@ struct PaperApp: App {
 
     var body: some Scene {
         #if os(macOS)
-        Window("Paper", id: PaperWindowID.main) {
-            ContentView(store: store)
+        WindowGroup("Paper", id: PaperWindowID.main, for: PersistentIdentifier.self) { $paperID in
+            ContentView(store: store, paperID: $paperID)
                 .background(TransparentWindow())
         }
         .modelContainer(container)
@@ -29,8 +29,8 @@ struct PaperApp: App {
             PaperMenuBarMenu(store: store)
         }
         #else
-        WindowGroup {
-            ContentView(store: store)
+        WindowGroup(for: PersistentIdentifier.self) { $paperID in
+            ContentView(store: store, paperID: $paperID)
         }
         .modelContainer(container)
         #endif
@@ -41,30 +41,31 @@ struct PaperApp: App {
 struct PaperCommands: Commands {
     let store: PaperStore
     @Environment(\.openWindow) private var openWindow
+    @FocusedValue(\.paperDocument) private var focusedPaper
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New paper") { store.newPaper() }
-                .keyboardShortcut("n")
+            Button("New paper") {
+                openWindow(value: store.newPaper(style: focusedPaper?.paperStyle ?? .dotted))
+            }
+            .keyboardShortcut("n")
         }
 
         CommandMenu("Paper") {
             Button("View all papers") { openWindow(id: PaperWindowID.allPapers) }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
             Divider()
-            Button("Next paper") { store.nextPaper() }
-                .keyboardShortcut("]")
-            Button("Previous paper") { store.previousPaper() }
-                .keyboardShortcut("[")
-            Divider()
-            Button("Plain") { store.setStyle(.plain) }
+            Button("Plain") { setStyle(.plain) }
                 .keyboardShortcut("1")
-            Button("Dotted") { store.setStyle(.dotted) }
+            Button("Dotted") { setStyle(.dotted) }
                 .keyboardShortcut("2")
-            Button("Ruled") { store.setStyle(.lines) }
+            Button("Ruled") { setStyle(.lines) }
                 .keyboardShortcut("3")
             Divider()
-            Button("Delete paper") { store.deleteCurrentPaper() }
+            Button("Delete paper") {
+                if let focusedPaper { store.delete(focusedPaper) }
+            }
+            .disabled(focusedPaper == nil)
         }
 
         CommandMenu("Format") {
@@ -76,6 +77,8 @@ struct PaperCommands: Commands {
                 .keyboardShortcut("x", modifiers: [.command, .shift])
             Button("Inline code") { send(#selector(PaperTextView.toggleCodeMarkdown(_:))) }
                 .keyboardShortcut("e")
+            Button("Highlight") { send(#selector(PaperTextView.toggleHighlightMarkdown(_:))) }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
             Divider()
             Button("Text") { send(#selector(PaperTextView.setLineText(_:))) }
                 .keyboardShortcut("0", modifiers: [.command, .option])
@@ -98,6 +101,10 @@ struct PaperCommands: Commands {
             Button("Move block down") { send(#selector(PaperTextView.moveBlockDown(_:))) }
                 .keyboardShortcut(.downArrow, modifiers: [.command, .control])
         }
+    }
+
+    private func setStyle(_ style: PaperStyle) {
+        if let focusedPaper { store.setStyle(style, for: focusedPaper) }
     }
 
     private func send(_ action: Selector) {
