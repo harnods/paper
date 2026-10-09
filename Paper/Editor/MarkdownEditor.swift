@@ -46,8 +46,8 @@ final class PaperClipView: NSClipView {
         case .plain:
             break
         case .dotted:
-            NSColor.black.withAlphaComponent(0.34).setFill()
-            let dot: CGFloat = 3
+            NSColor.black.withAlphaComponent(0.2).setFill()
+            let dot: CGFloat = 2.6
             let columns = Int(bounds.width / unit)
             var row = firstRow
             while origin + row * unit < dirtyRect.maxY + unit {
@@ -60,7 +60,7 @@ final class PaperClipView: NSClipView {
             }
         case .lines:
             // Each ruled line sits where a row's text baseline is, so writing rests on the line.
-            NSColor(red: 0.28, green: 0.48, blue: 0.80, alpha: 0.5).setFill()
+            NSColor(red: 0.35, green: 0.55, blue: 0.85, alpha: 0.22).setFill()
             var row = firstRow
             while origin + row * unit < dirtyRect.maxY + unit {
                 let y = (origin + row * unit + MarkdownStyler.gridBaseline).rounded()
@@ -256,7 +256,9 @@ struct MarkdownEditor: NSViewRepresentable {
         private func updateChip() {
             guard let chip, let scrollView, let textView else { return }
             let bounds = scrollView.bounds
-            chip.frame.origin = NSPoint(x: (bounds.width - ScrollToBottomChip.size) / 2, y: 20)
+            let inset: CGFloat = 20
+            let y = scrollView.isFlipped ? bounds.height - ScrollToBottomChip.size - inset : inset
+            chip.frame.origin = NSPoint(x: (bounds.width - ScrollToBottomChip.size) / 2, y: y)
             let clip = scrollView.contentView.bounds
             let remaining = textView.frame.height - clip.maxY
             chip.setVisible(remaining > max(160, clip.height / 3))

@@ -542,9 +542,9 @@ final class PaperTextView: NSTextView {
             let content = line.content
             switch kind {
             case .divider:
-                let y = content.midY.rounded() + 0.5
-                NSColor.black.withAlphaComponent(0.12).setFill()
-                NSRect(x: content.minX, y: y - 0.5, width: content.width, height: 1).fill()
+                let y = content.midY.rounded()
+                NSColor.black.withAlphaComponent(0.4).setFill()
+                NSRect(x: content.minX, y: y - 0.5, width: content.width, height: 1.5).fill()
             case .callout:
                 let box = NSRect(x: content.minX, y: content.minY - 8, width: content.width, height: content.height + 16)
                 NSColor.black.withAlphaComponent(0.04).setFill()
