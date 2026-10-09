@@ -75,6 +75,58 @@ final class PaperClipView: NSClipView {
     }
 }
 
+/// Round "go to bottom" button that floats over the paper while you're far from the end.
+final class ScrollToBottomChip: NSView {
+    static let size: CGFloat = 34
+    var onClick: (() -> Void)?
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: Self.size, height: Self.size))
+        wantsLayer = true
+        layer?.cornerRadius = Self.size / 2
+        layer?.backgroundColor = NSColor.white.cgColor
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.black.withAlphaComponent(0.1).cgColor
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = 0.12
+        layer?.shadowRadius = 6
+        layer?.shadowOffset = CGSize(width: 0, height: -2)
+        layer?.masksToBounds = false
+        alphaValue = 0
+        isHidden = true
+        toolTip = "Go to bottom"
+        setAccessibilityRole(.button)
+        setAccessibilityLabel("Go to bottom")
+
+        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
+        if let symbol = NSImage(systemSymbolName: "arrow.down", accessibilityDescription: nil)?
+            .withSymbolConfiguration(config) {
+            let imageView = NSImageView(image: symbol)
+            imageView.contentTintColor = NSColor.black.withAlphaComponent(0.7)
+            imageView.frame = bounds
+            imageView.autoresizingMask = [.width, .height]
+            addSubview(imageView)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func mouseDown(with event: NSEvent) { onClick?() }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    func setVisible(_ visible: Bool) {
+        guard visible == isHidden else { return }
+        if visible { isHidden = false }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.18
+            animator().alphaValue = visible ? 1 : 0
+        }, completionHandler: { [weak self] in
+            if !visible { self?.isHidden = true }
+        })
+    }
+}
+
 struct MarkdownEditor: NSViewRepresentable {
     let document: Document
     let style: PaperStyle
@@ -134,6 +186,10 @@ struct MarkdownEditor: NSViewRepresentable {
         scrollView.layer?.cornerCurve = .continuous
         scrollView.layer?.masksToBounds = true
 
+        let chip = ScrollToBottomChip()
+        scrollView.addSubview(chip)
+        context.coordinator.attachChip(chip, to: scrollView, textView: textView)
+
         textView.string = document.markdown
         textView.restyle()
         textView.undoManager?.removeAllActions()
@@ -155,10 +211,64 @@ struct MarkdownEditor: NSViewRepresentable {
         let store: PaperStore
         let actions: PaperActions
 
+        private var observers: [NSObjectProtocol] = []
+        private weak var chip: ScrollToBottomChip?
+        private weak var scrollView: NSScrollView?
+        private weak var textView: NSTextView?
+
         init(document: Document, store: PaperStore, actions: PaperActions) {
             self.document = document
             self.store = store
             self.actions = actions
+        }
+
+        deinit {
+            for observer in observers {
+                NotificationCenter.default.removeObserver(observer)
+            }
+        }
+
+        func attachChip(_ chip: ScrollToBottomChip, to scrollView: NSScrollView, textView: NSTextView) {
+            self.chip = chip
+            self.scrollView = scrollView
+            self.textView = textView
+            chip.onClick = { [weak self] in self?.scrollToBottom() }
+
+            let clip = scrollView.contentView
+            clip.postsBoundsChangedNotifications = true
+            textView.postsFrameChangedNotifications = true
+            scrollView.postsFrameChangedNotifications = true
+            let center = NotificationCenter.default
+            for (name, object) in [(NSView.boundsDidChangeNotification, clip as NSView),
+                                   (NSView.frameDidChangeNotification, textView as NSView),
+                                   (NSView.frameDidChangeNotification, scrollView as NSView)] {
+                observers.append(center.addObserver(forName: name, object: object, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.updateChip() }
+                })
+            }
+            DispatchQueue.main.async { [weak self] in self?.updateChip() }
+        }
+
+        /// Shows the chip when more than about a screen's third of text is below the visible area.
+        private func updateChip() {
+            guard let chip, let scrollView, let textView else { return }
+            let bounds = scrollView.bounds
+            chip.frame.origin = NSPoint(x: (bounds.width - ScrollToBottomChip.size) / 2, y: 20)
+            let clip = scrollView.contentView.bounds
+            let remaining = textView.frame.height - clip.maxY
+            chip.setVisible(remaining > max(160, clip.height / 3))
+        }
+
+        private func scrollToBottom() {
+            guard let scrollView, let textView else { return }
+            let clip = scrollView.contentView
+            let target = NSPoint(x: 0, y: max(0, textView.frame.height - clip.bounds.height))
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.35
+                context.allowsImplicitAnimation = true
+                clip.animator().setBoundsOrigin(target)
+            }
+            scrollView.reflectScrolledClipView(clip)
         }
 
         func textDidChange(_ notification: Notification) {

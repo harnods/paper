@@ -69,8 +69,9 @@ enum MarkdownStyler {
     static let placeholderColor = NSColor.black.withAlphaComponent(0.25)
     static let highlightColor = NSColor(red: 1.0, green: 0.88, blue: 0.35, alpha: 0.55)
     static let bodySize: CGFloat = 16
-    static let bodyLineHeight: CGFloat = 24
-    static let blockSpacing: CGFloat = 6
+    static let bodyLineHeight: CGFloat = 26
+    static let blockSpacing: CGFloat = 12
+    static let listItemSpacing: CGFloat = 4
     static let listIndent: CGFloat = 24
 
     static var bodyFont: NSFont { .systemFont(ofSize: bodySize) }
@@ -160,8 +161,8 @@ enum MarkdownStyler {
             paragraph.lineSpacing = max(0, font.pointSize * 1.2 - natural)
         case .heading(let level):
             paragraph.lineSpacing = max(0, font.pointSize * 1.3 - natural)
-            paragraph.paragraphSpacingBefore = level == 1 ? 26 : level == 2 ? 18 : 12
-            paragraph.paragraphSpacing = 4
+            paragraph.paragraphSpacingBefore = level == 1 ? 20 : level == 2 ? 16 : 12
+            paragraph.paragraphSpacing = 6
         default:
             paragraph.lineSpacing = max(0, bodyLineHeight - natural)
             paragraph.paragraphSpacing = blockSpacing
@@ -172,8 +173,10 @@ enum MarkdownStyler {
         case .bullet:
             paragraph.firstLineHeadIndent = level * listIndent + listIndent
             paragraph.headIndent = paragraph.firstLineHeadIndent
+            paragraph.paragraphSpacing = listItemSpacing
         case .numbered:
             paragraph.headIndent = markerWidth
+            paragraph.paragraphSpacing = listItemSpacing
         case .quote:
             paragraph.firstLineHeadIndent = 18
             paragraph.headIndent = 18
