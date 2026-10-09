@@ -36,3 +36,9 @@ targets:
           SWIFT_OPTIMIZATION_LEVEL: -Onone
         Release:
           SWIFT_OPTIMIZATION_LEVEL: -O
+
+schemes:
+  Paper:
+    build:
+      targets:
+        Paper: all
