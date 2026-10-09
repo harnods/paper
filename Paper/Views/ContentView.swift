@@ -58,9 +58,9 @@ struct ContentView: View {
             Button(action: createNewDocument) {
                 Image(systemName: "plus")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.secondary.opacity(0.4))
                     .frame(width: 28, height: 28)
-                    .background(.quaternary.opacity(0.5), in: Circle())
+                    .background(Color.black.opacity(0.04), in: Circle())
             }
             .buttonStyle(.plain)
         }
@@ -77,10 +77,10 @@ struct ContentView: View {
                         Text("\(documents.count)")
                             .font(.system(size: 12, weight: .medium))
                     }
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.secondary.opacity(0.4))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(.quaternary.opacity(0.5), in: Capsule())
+                    .background(Color.black.opacity(0.04), in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .padding(16)

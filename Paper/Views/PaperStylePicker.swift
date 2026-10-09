@@ -10,12 +10,12 @@ struct PaperStylePicker: View {
                 Button(action: { style = paperStyle }) {
                     Image(systemName: paperStyle.icon)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(style == paperStyle ? .primary.opacity(0.5) : .tertiary)
+                        .foregroundStyle(style == paperStyle ? Color.primary.opacity(0.5) : Color.secondary.opacity(0.4))
                         .frame(width: 24, height: 24)
                         .background(
                             style == paperStyle
-                                ? AnyShapeStyle(.quaternary.opacity(0.5))
-                                : AnyShapeStyle(.clear),
+                                ? Color.black.opacity(0.05)
+                                : Color.clear,
                             in: RoundedRectangle(cornerRadius: 5, style: .continuous)
                         )
                 }
@@ -24,7 +24,7 @@ struct PaperStylePicker: View {
             }
         }
         .padding(3)
-        .background(.quaternary.opacity(0.3), in: Capsule())
+        .background(Color.black.opacity(0.04), in: Capsule())
         .opacity(isHovering ? 1 : 0.4)
         .animation(.easeInOut(duration: 0.2), value: isHovering)
         .onHover { isHovering = $0 }
