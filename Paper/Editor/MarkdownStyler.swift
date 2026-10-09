@@ -79,7 +79,7 @@ enum MarkdownStyler {
     static let pageInset: CGFloat = 56
 
     static let bodyFont = NSFont.systemFont(ofSize: bodySize)
-    private static let titleFont = NSFont.systemFont(ofSize: 36, weight: .bold)
+    private static let titleFont = NSFont.systemFont(ofSize: 36, weight: .semibold)
     private static let heading1Font = NSFont.systemFont(ofSize: 30, weight: .semibold)
     private static let heading2Font = NSFont.systemFont(ofSize: 24, weight: .semibold)
     private static let heading3Font = NSFont.systemFont(ofSize: 20, weight: .semibold)
@@ -324,10 +324,15 @@ enum MarkdownStyler {
             }
         }
 
+        // "Bold" is drawn in semibold: full bold reads too heavy on the page.
         apply(bold, markerLength: 2) { inner in
             storage.enumerateAttribute(.font, in: inner, options: []) { value, sub, _ in
                 let f = (value as? NSFont) ?? baseFont
-                storage.addAttribute(.font, value: manager.convert(f, toHaveTrait: .boldFontMask), range: sub)
+                var strong = NSFont.systemFont(ofSize: f.pointSize, weight: .semibold)
+                if manager.traits(of: f).contains(.italicFontMask) {
+                    strong = manager.convert(strong, toHaveTrait: .italicFontMask)
+                }
+                storage.addAttribute(.font, value: strong, range: sub)
             }
         }
         apply(italic, markerLength: 1) { inner in

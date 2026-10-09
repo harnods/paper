@@ -756,7 +756,8 @@ final class PaperTextView: NSTextView {
             }
             dismissedSelection = nil
         }
-        guard selection.length > 0, window?.firstResponder === self,
+        // The title has a fixed style, so selecting it never offers formatting.
+        guard selection.length > 0, !caretIsOnTitle, window?.firstResponder === self,
               let layoutManager, let textContainer else {
             formatToolbar.isHidden = true
             return
