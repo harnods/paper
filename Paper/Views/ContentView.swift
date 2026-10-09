@@ -51,6 +51,7 @@ struct ContentView: View {
             }
         }
         .frame(width: PaperLayout.windowSize.width, height: PaperLayout.windowSize.height)
+        .background(PaperWindowRegistrar(paperID: paperID))
         .preferredColorScheme(.light)
         .onAppear {
             if paperID == nil { paperID = store.defaultPaperID() }

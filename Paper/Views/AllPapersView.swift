@@ -8,6 +8,38 @@ enum PaperWindowID {
     static let allPapers = "all-papers"
 }
 
+/// Remembers each paper's window so it can be brought to the very front.
+enum PaperWindowRegistry {
+    private static var windows: [PersistentIdentifier: WeakWindow] = [:]
+
+    private struct WeakWindow { weak var window: NSWindow? }
+
+    static func register(_ window: NSWindow, for id: PersistentIdentifier) {
+        windows[id] = WeakWindow(window: window)
+    }
+
+    static func bringToFront(_ id: PersistentIdentifier) {
+        guard let window = windows[id]?.window else { return }
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+    }
+}
+
+/// Registers the window it lives in for a paper.
+struct PaperWindowRegistrar: NSViewRepresentable {
+    let paperID: PersistentIdentifier?
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        guard let paperID else { return }
+        DispatchQueue.main.async {
+            if let window = view.window { PaperWindowRegistry.register(window, for: paperID) }
+        }
+    }
+}
+
 /// Menu bar dropdown.
 struct PaperMenuBarMenu: View {
     let store: PaperStore
@@ -69,7 +101,7 @@ struct AllPapersView: View {
         let index = min(selected, max(papers.count - 1, 0))
 
         ZStack {
-            Color.black.opacity(0.85)
+            Color.black
                 .contentShape(Rectangle())
                 .onTapGesture { close() }
 
@@ -93,7 +125,8 @@ struct AllPapersView: View {
         .background(OverlayWindowConfigurator(
             onLeft: { move(-1, in: papers) },
             onRight: { move(1, in: papers) },
-            onEscape: { close() }
+            onEscape: { close() },
+            onScroll: { move($0, in: papers) }
         ))
         .onAppear { searchFocused = true }
         .onChange(of: query) { _, _ in selected = 0 }
@@ -202,10 +235,17 @@ struct AllPapersView: View {
         dismissWindow(id: PaperWindowID.allPapers)
     }
 
+    /// Opens the paper on top of everything, then closes the overlay.
     private func open(_ doc: Document) {
-        close()
+        let id = doc.persistentModelID
         NSApp.activate()
-        openWindow(value: doc.persistentModelID)
+        openWindow(value: id)
+        Task { @MainActor in
+            // Give the window a moment to appear before raising it above everything.
+            try? await Task.sleep(for: .milliseconds(50))
+            PaperWindowRegistry.bringToFront(id)
+            close()
+        }
     }
 }
 
@@ -291,11 +331,31 @@ struct OverlayWindowConfigurator: NSViewRepresentable {
     var onLeft: () -> Void
     var onRight: () -> Void
     var onEscape: () -> Void
+    /// Called with -1 or 1 for each step of trackpad swipe or mouse wheel.
+    var onScroll: (Int) -> Void
 
     final class Coordinator {
         var observer: NSObjectProtocol?
         var monitor: Any?
         var parent: OverlayWindowConfigurator?
+        var scrollAccumulator: CGFloat = 0
+
+        /// Trackpads send many small deltas; step once per ~40pt of swipe. A mouse wheel steps per notch.
+        func handleScroll(_ event: NSEvent) {
+            let horizontal = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY)
+            let delta = horizontal ? event.scrollingDeltaX : event.scrollingDeltaY
+            guard delta != 0 else { return }
+            if !event.hasPreciseScrollingDeltas {
+                parent?.onScroll(delta < 0 ? 1 : -1)
+                return
+            }
+            if event.phase == .began { scrollAccumulator = 0 }
+            scrollAccumulator += delta
+            if abs(scrollAccumulator) >= 40 {
+                parent?.onScroll(scrollAccumulator < 0 ? 1 : -1)
+                scrollAccumulator = 0
+            }
+        }
 
         deinit {
             if let observer { NotificationCenter.default.removeObserver(observer) }
@@ -331,8 +391,12 @@ struct OverlayWindowConfigurator: NSViewRepresentable {
             ) { [weak window] _ in
                 window?.close()
             }
-            coordinator.monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak window, weak coordinator] event in
-                guard event.window === window, let parent = coordinator?.parent else { return event }
+            coordinator.monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .scrollWheel]) { [weak window, weak coordinator] event in
+                guard event.window === window, let coordinator, let parent = coordinator.parent else { return event }
+                if event.type == .scrollWheel {
+                    coordinator.handleScroll(event)
+                    return nil
+                }
                 switch event.keyCode {
                 case 123: parent.onLeft(); return nil
                 case 124: parent.onRight(); return nil
