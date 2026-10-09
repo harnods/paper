@@ -11,7 +11,7 @@ enum PaperData {
     /// Opens the store; if an old store can't be migrated, moves it aside as a backup and starts fresh.
     private static func makeContainer() -> ModelContainer {
         let configuration = ModelConfiguration()
-        if let container = try? ModelContainer(for: Document.self, configurations: configuration) {
+        if let container = try? ModelContainer(for: Document.self, Folder.self, configurations: configuration) {
             return container
         }
 
@@ -26,7 +26,7 @@ enum PaperData {
         }
 
         do {
-            return try ModelContainer(for: Document.self, configurations: configuration)
+            return try ModelContainer(for: Document.self, Folder.self, configurations: configuration)
         } catch {
             fatalError("Could not open the paper store: \(error)")
         }
@@ -38,6 +38,7 @@ enum PaperData {
 final class PaperStore {
     private let context: ModelContext
     private(set) var documents: [Document] = []
+    private(set) var folders: [Folder] = []
     /// Set when a paper should open in a window from outside the UI (Siri, Shortcuts).
     var pendingOpen: PersistentIdentifier?
 
@@ -86,8 +87,60 @@ final class PaperStore {
         reload()
     }
 
+    // MARK: Folders
+
+    func folder(for id: String?) -> Folder? {
+        guard let id else { return nil }
+        return folders.first { $0.folderID == id }
+    }
+
+    func folders(in parentID: String?) -> [Folder] {
+        folders.filter { $0.parentID == parentID }
+    }
+
+    func papers(in folderID: String?) -> [Document] {
+        documents.filter { $0.folderID == folderID }
+    }
+
+    func itemCount(in folder: Folder) -> Int {
+        papers(in: folder.folderID).count + folders(in: folder.folderID).count
+    }
+
+    @discardableResult
+    func newFolder(in parentID: String?) -> Folder {
+        let folder = Folder(name: "New folder", parentID: parentID)
+        context.insert(folder)
+        try? context.save()
+        reload()
+        return folder
+    }
+
+    func rename(_ folder: Folder, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        folder.name = trimmed.isEmpty ? "Untitled folder" : trimmed
+        try? context.save()
+        reload()
+    }
+
+    /// Deletes the folder but keeps what's inside: its papers and subfolders move up a level.
+    func delete(_ folder: Folder) {
+        for paper in papers(in: folder.folderID) { paper.folderID = folder.parentID }
+        for child in folders(in: folder.folderID) { child.parentID = folder.parentID }
+        context.delete(folder)
+        try? context.save()
+        reload()
+    }
+
+    func move(_ paper: Document, to folderID: String?) {
+        paper.folderID = folderID
+        try? context.save()
+        reload()
+    }
+
     private func reload() {
         let descriptor = FetchDescriptor<Document>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         documents = (try? context.fetch(descriptor)) ?? []
+        let folderDescriptor = FetchDescriptor<Folder>(sortBy: [SortDescriptor(\.name)])
+        folders = (try? context.fetch(folderDescriptor)) ?? []
     }
 }

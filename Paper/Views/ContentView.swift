@@ -84,7 +84,7 @@ struct ContentView: View {
     private func actions(for doc: Document) -> PaperActions {
         PaperActions(
             newPaper: { openWindow(value: store.newPaper(style: doc.paperStyle)) },
-            viewAllPapers: { openWindow(id: PaperWindowID.allPapers) },
+            viewAllPapers: { AllPapersOverlay.show(store: store) { openWindow(value: $0) } },
             delete: { store.delete(doc) }
         )
     }

@@ -9,6 +9,8 @@ final class Document {
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var paperStyleRaw: String = PaperStyle.dotted.rawValue
+    /// The folder this paper is in; nil means the top level.
+    var folderID: String?
 
     var paperStyle: PaperStyle {
         get { PaperStyle(rawValue: paperStyleRaw) ?? .dotted }

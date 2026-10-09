@@ -18,14 +18,6 @@ struct PaperApp: App {
         .defaultPosition(.center)
         .commands { PaperCommands(store: store) }
 
-        Window("All papers", id: PaperWindowID.allPapers) {
-            AllPapersView(store: store)
-        }
-        .modelContainer(container)
-        .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
-        .defaultPosition(.top)
-
         MenuBarExtra("Paper", image: "MenuBarIcon") {
             PaperMenuBarMenu(store: store)
         }
@@ -53,7 +45,7 @@ struct PaperCommands: Commands {
         }
 
         CommandMenu("Paper") {
-            Button("View all papers") { openWindow(id: PaperWindowID.allPapers) }
+            Button("View all papers") { AllPapersOverlay.show(store: store) { openWindow(value: $0) } }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
             Divider()
             Button("Plain") { setStyle(.plain) }
