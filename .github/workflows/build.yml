@@ -15,7 +15,7 @@ jobs:
           - scheme: Paper_macOS
             destination: platform=macOS
           - scheme: Paper_iOS
-            destination: platform=iOS Simulator,name=iPhone 16
+            destination: generic/platform=iOS Simulator
     steps:
       - uses: actions/checkout@v4
 
