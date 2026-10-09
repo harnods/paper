@@ -89,10 +89,17 @@ enum MarkdownStyler {
     static let pageInset: CGFloat = 56
 
     static let bodyFont = PlatformFont.systemFont(ofSize: bodySize)
-    private static let titleFont = PlatformFont.systemFont(ofSize: 36, weight: .semibold)
-    private static let heading1Font = PlatformFont.systemFont(ofSize: 30, weight: .semibold)
-    private static let heading2Font = PlatformFont.systemFont(ofSize: 24, weight: .semibold)
-    private static let heading3Font = PlatformFont.systemFont(ofSize: 20, weight: .semibold)
+    #if os(iOS)
+    /// A phone is narrow: headings step down so titles don't wrap onto several lines.
+    /// Body text, line height and spacing stay the same as on the Mac (and on iPad).
+    private static let isPhone = UIDevice.current.userInterfaceIdiom == .phone
+    #else
+    private static let isPhone = false
+    #endif
+    private static let titleFont = PlatformFont.systemFont(ofSize: isPhone ? 28 : 36, weight: .semibold)
+    private static let heading1Font = PlatformFont.systemFont(ofSize: isPhone ? 24 : 30, weight: .semibold)
+    private static let heading2Font = PlatformFont.systemFont(ofSize: isPhone ? 20 : 24, weight: .semibold)
+    private static let heading3Font = PlatformFont.systemFont(ofSize: isPhone ? 18 : 20, weight: .semibold)
     /// Hidden syntax keeps its characters but draws them invisibly at near-zero width.
     private static let hiddenFont = PlatformFont.systemFont(ofSize: 0.01)
     #if os(macOS)

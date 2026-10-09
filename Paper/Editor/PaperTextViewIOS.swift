@@ -65,7 +65,17 @@ final class PaperTextView: UITextView, UITextViewDelegate {
         undoManager?.removeAllActions()
     }
 
+    /// Readable line length: on wide screens (landscape, iPad) the text stays a centred column,
+    /// about as wide as the Mac paper's text.
+    private static let maxTextWidth: CGFloat = 660 - 2 * MarkdownStyler.pageInset
+    private static let minSideInset: CGFloat = 20
+
     override func layoutSubviews() {
+        let side = max(Self.minSideInset, ((bounds.width - Self.maxTextWidth) / 2).rounded())
+        if textContainerInset.left != side {
+            textContainerInset.left = side
+            textContainerInset.right = side
+        }
         super.layoutSubviews()
         // The decoration layer covers only what's on screen and redraws as you scroll.
         if decoration.frame != bounds {
