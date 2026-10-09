@@ -18,11 +18,14 @@ enum PaperWindowRegistry {
         windows[id] = WeakWindow(window: window)
     }
 
-    static func bringToFront(_ id: PersistentIdentifier) {
-        guard let window = windows[id]?.window else { return }
+    /// Returns false while the paper's window hasn't appeared yet.
+    @discardableResult
+    static func bringToFront(_ id: PersistentIdentifier) -> Bool {
+        guard let window = windows[id]?.window else { return false }
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
+        return true
     }
 }
 
@@ -161,15 +164,11 @@ struct AllPapersView: View {
                 let offset = CGFloat(position - index) + dragProgress
                 if abs(offset) <= 6 {
                     card(doc, offset: offset)
-                        .onTapGesture {
-                            if position == index { open(doc) } else { selected = position }
-                        }
-                        .contextMenu {
-                            Button("Open") { open(doc) }
-                            Button("Delete paper", role: .destructive) { store.delete(doc) }
-                        }
+                        .allowsHitTesting(false)
                 }
             }
+            hitLayer(papers, index: index)
+                .zIndex(100)
         }
         .frame(height: Self.cardSize.height * 1.35)
         .contentShape(Rectangle())
@@ -184,6 +183,30 @@ struct AllPapersView: View {
         )
         .animation(.spring(response: 0.4, dampingFraction: 0.86), value: index)
         .animation(.interactiveSpring(), value: dragProgress)
+    }
+
+    /// Flat click targets over the 3D cards, which don't hit-test reliably: the centre opens the
+    /// paper, either side moves to the previous or next one.
+    private func hitLayer(_ papers: [Document], index: Int) -> some View {
+        let center = papers[index]
+        return HStack(spacing: 0) {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { move(-1, in: papers) }
+            Color.clear
+                .contentShape(Rectangle())
+                .frame(width: Self.cardSize.width)
+                .onTapGesture { open(center) }
+                .contextMenu {
+                    Button("Open") { open(center) }
+                    Button("Delete paper", role: .destructive) { store.delete(center) }
+                }
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { move(1, in: papers) }
+        }
+        .frame(height: Self.cardSize.height)
+        .offset(y: -Self.cardSize.height * 0.15)
     }
 
     /// Cover Flow: the centre card faces you; the rest turn away and tuck in on either side.
@@ -241,9 +264,11 @@ struct AllPapersView: View {
         NSApp.activate()
         openWindow(value: id)
         Task { @MainActor in
-            // Give the window a moment to appear before raising it above everything.
-            try? await Task.sleep(for: .milliseconds(50))
-            PaperWindowRegistry.bringToFront(id)
+            // A new window can take a moment to appear; keep trying for up to half a second.
+            for _ in 0..<10 {
+                try? await Task.sleep(for: .milliseconds(50))
+                if PaperWindowRegistry.bringToFront(id) { break }
+            }
             close()
         }
     }
