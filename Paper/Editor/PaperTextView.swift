@@ -458,9 +458,19 @@ final class PaperTextView: NSTextView {
                                        owner: self, userInfo: ["paper": true]))
     }
 
+    /// Whether the pointer is over a floating control (format toolbar, go-to-bottom chip), where the
+    /// text view must not force its I-beam cursor.
     private func isOverToolbar(_ event: NSEvent) -> Bool {
-        guard !formatToolbar.isHidden, formatToolbar.superview === self else { return false }
-        return formatToolbar.frame.contains(convert(event.locationInWindow, from: nil))
+        if !formatToolbar.isHidden, formatToolbar.superview === self,
+           formatToolbar.frame.contains(convert(event.locationInWindow, from: nil)) {
+            return true
+        }
+        var view = window?.contentView?.hitTest(event.locationInWindow)
+        while let current = view {
+            if current is ScrollToBottomChip { return true }
+            view = current.superview
+        }
+        return false
     }
 
     override func cursorUpdate(with event: NSEvent) {

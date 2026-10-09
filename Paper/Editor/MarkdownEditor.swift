@@ -97,6 +97,28 @@ final class ScrollToBottomChip: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+    private var hoverArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero,
+                                  options: [.mouseEnteredAndExited, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        layer?.backgroundColor = NSColor(white: 0.95, alpha: 1).cgColor
+        NSCursor.pointingHand.set()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        layer?.backgroundColor = NSColor.white.cgColor
+    }
+
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
     override func mouseDown(with event: NSEvent) { onClick?() }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
     override var mouseDownCanMoveWindow: Bool { false }
