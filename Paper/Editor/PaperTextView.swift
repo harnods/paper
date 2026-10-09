@@ -500,7 +500,8 @@ final class PaperTextView: NSTextView {
                 let box = NSRect(x: content.minX, y: content.minY - 8, width: content.width, height: content.height + 16)
                 NSColor.black.withAlphaComponent(0.04).setFill()
                 NSBezierPath(roundedRect: box, xRadius: 6, yRadius: 6).fill()
-                ("\u{1F4A1}" as NSString).draw(at: NSPoint(x: content.minX + 12, y: line.firstLine.minY),
+                ("\u{1F4A1}" as NSString).draw(at: NSPoint(x: content.minX + 12,
+                                                         y: line.firstLine.minY + MarkdownStyler.verticalInset(for: .body)),
                                                 withAttributes: [.font: MarkdownStyler.bodyFont])
             case .quote:
                 let bar = NSRect(x: content.minX + 2, y: content.minY + 1, width: 3, height: max(content.height - 2, 0))
@@ -509,7 +510,8 @@ final class PaperTextView: NSTextView {
             case .bullet:
                 let info = MarkdownStyler.parse(nsString.substring(with: ranges[index]), isFirst: false)
                 let x = content.minX + CGFloat(info.level) * MarkdownStyler.listIndent + 7
-                ("\u{2022}" as NSString).draw(at: NSPoint(x: x, y: line.firstLine.minY), withAttributes: [
+                let y = line.firstLine.minY + MarkdownStyler.verticalInset(for: .body)
+                ("\u{2022}" as NSString).draw(at: NSPoint(x: x, y: y), withAttributes: [
                     .font: MarkdownStyler.bodyFont,
                     .foregroundColor: MarkdownStyler.textColor,
                 ])
@@ -545,7 +547,8 @@ final class PaperTextView: NSTextView {
                 ? textStorage?.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle
                 : nil
             let x = line.content.minX + max(style?.firstLineHeadIndent ?? 0, style?.headIndent ?? 0)
-            (text as NSString).draw(at: NSPoint(x: x, y: line.firstLine.minY), withAttributes: [
+            let y = line.firstLine.minY + MarkdownStyler.verticalInset(for: info.kind)
+            (text as NSString).draw(at: NSPoint(x: x, y: y), withAttributes: [
                 .font: MarkdownStyler.font(for: info.kind),
                 .foregroundColor: MarkdownStyler.placeholderColor,
             ])
@@ -594,6 +597,8 @@ final class PaperTextView: NSTextView {
         let font = MarkdownStyler.font(for: currentLine().info.kind)
         let height = ceil(font.ascender - font.descender)
         if rect.height > height {
+            // Text is centred in its line box, so centre the caret too.
+            rect.origin.y += ((rect.height - height) / 2).rounded()
             rect.size.height = height
         }
         super.drawInsertionPoint(in: rect, color: color, turnedOn: flag)

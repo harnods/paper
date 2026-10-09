@@ -160,19 +160,18 @@ enum MarkdownStyler {
     static func attributes(for kind: LineKind, info: LineInfo? = nil, markerWidth: CGFloat = 0) -> [NSAttributedString.Key: Any] {
         let font = font(for: kind)
         let paragraph = NSMutableParagraphStyle()
-        let natural = metrics.defaultLineHeight(for: font)
-        // Keeps lines whose text is all hidden syntax (empty headings, dividers) at full height.
-        paragraph.minimumLineHeight = natural
+        // A fixed line height (also keeps lines made only of hidden syntax at full height).
+        let height = lineHeight(for: kind)
+        paragraph.minimumLineHeight = height
+        paragraph.maximumLineHeight = height
 
         switch kind {
         case .title:
-            paragraph.lineSpacing = max(0, font.pointSize * 1.2 - natural)
+            break
         case .heading(let level):
-            paragraph.lineSpacing = max(0, font.pointSize * 1.3 - natural)
             paragraph.paragraphSpacingBefore = level == 1 ? 20 : level == 2 ? 16 : 12
             paragraph.paragraphSpacing = 6
         default:
-            paragraph.lineSpacing = max(0, bodyLineHeight - natural)
             paragraph.paragraphSpacing = blockSpacing
         }
 
@@ -202,7 +201,26 @@ enum MarkdownStyler {
             .font: font,
             .foregroundColor: textColor,
             .paragraphStyle: paragraph,
+            .baselineOffset: verticalInset(for: kind),
         ]
+    }
+
+    /// Line box height per block type; text is centred inside it, like CSS line-height.
+    static func lineHeight(for kind: LineKind) -> CGFloat {
+        let font = font(for: kind)
+        let natural = metrics.defaultLineHeight(for: font)
+        switch kind {
+        case .title: return max(natural, (font.pointSize * 1.2).rounded())
+        case .heading: return max(natural, (font.pointSize * 1.3).rounded())
+        default: return max(natural, bodyLineHeight)
+        }
+    }
+
+    /// Space above the text inside its line box. Extra line height would otherwise all sit above
+    /// the glyphs; raising the baseline by half splits it evenly above and below.
+    static func verticalInset(for kind: LineKind) -> CGFloat {
+        let natural = metrics.defaultLineHeight(for: font(for: kind))
+        return max(0, (lineHeight(for: kind) - natural) / 2)
     }
 
     /// Space between the title and the first block, set as space before the first block.
