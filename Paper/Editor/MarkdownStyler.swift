@@ -1,7 +1,7 @@
 #if os(macOS)
 import AppKit
 typealias PlatformFont = NSFont
-typealias PlatformColor = PlatformColor
+typealias PlatformColor = NSColor
 #else
 import UIKit
 typealias PlatformFont = UIFont
