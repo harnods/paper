@@ -56,11 +56,28 @@ final class PaperTextView: NSTextView {
         needsDisplay = true
     }
 
-    /// An empty paper has no characters to take styling from, so its empty line would be laid out
-    /// (and the caret drawn) as body text; give it the title style instead.
-    private func updateTypingAttributes() {
-        let kind: LineKind = (textStorage?.length ?? 0) == 0 ? .title : .body
-        typingAttributes = MarkdownStyler.attributes(for: kind, grid: isGrid)
+    /// Empty lines at the end have no characters to take styling from, so they would be laid out
+    /// (and the caret and placeholder drawn) with default spacing. An empty paper gets the title
+    /// style; an empty line right under the title gets the gap below the title.
+    @discardableResult
+    private func updateTypingAttributes() -> Bool {
+        let ranges = lineRanges()
+        var attributes: [NSAttributedString.Key: Any]
+        var isSpecial = true
+        if (textStorage?.length ?? 0) == 0 {
+            attributes = MarkdownStyler.attributes(for: .title, grid: isGrid)
+        } else if ranges.count == 2, ranges[1].length == 0 {
+            attributes = MarkdownStyler.attributes(for: .body, grid: isGrid)
+            if let style = (attributes[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle {
+                style.paragraphSpacingBefore = isGrid ? MarkdownStyler.gridUnit : MarkdownStyler.titleGap
+                attributes[.paragraphStyle] = style
+            }
+        } else {
+            attributes = MarkdownStyler.attributes(for: .body, grid: isGrid)
+            isSpecial = false
+        }
+        typingAttributes = attributes
+        return isSpecial
     }
 
     // MARK: Hidden syntax
@@ -688,7 +705,14 @@ final class PaperTextView: NSTextView {
             }
         }
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
-        if (textStorage?.length ?? 0) == 0 { updateTypingAttributes() }
+        let ranges = lineRanges()
+        if (textStorage?.length ?? 0) == 0 || (ranges.count == 2 && ranges[1].length == 0) {
+            updateTypingAttributes()
+            if let length = textStorage?.length {
+                layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: length),
+                                                actualCharacterRange: nil)
+            }
+        }
         needsDisplay = true
         if stillSelecting {
             formatToolbar.isHidden = true
