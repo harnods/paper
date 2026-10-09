@@ -136,6 +136,9 @@ enum MarkdownStyler {
             let info = parse(line, isFirst: lineIndex == 0)
             result.kinds.append(info.kind)
             styleLine(storage, range: range, enclosing: enclosing, line: line, info: info, result: &result)
+            if lineIndex == 1 {
+                addSpaceBelowTitle(storage, enclosing: enclosing)
+            }
             lineIndex += 1
         }
         // A trailing newline leaves an empty last line that enumerateSubstrings skips.
@@ -155,7 +158,6 @@ enum MarkdownStyler {
         switch kind {
         case .title:
             paragraph.lineSpacing = max(0, font.pointSize * 1.2 - natural)
-            paragraph.paragraphSpacing = 18
         case .heading(let level):
             paragraph.lineSpacing = max(0, font.pointSize * 1.3 - natural)
             paragraph.paragraphSpacingBefore = level == 1 ? 26 : level == 2 ? 18 : 12
@@ -190,6 +192,17 @@ enum MarkdownStyler {
             .foregroundColor: textColor,
             .paragraphStyle: paragraph,
         ]
+    }
+
+    /// Space between the title and the first block, set as space before the first block.
+    static let titleGap: CGFloat = 28
+
+    private static func addSpaceBelowTitle(_ storage: NSTextStorage, enclosing: NSRange) {
+        guard enclosing.length > 0,
+              let current = storage.attribute(.paragraphStyle, at: enclosing.location, effectiveRange: nil) as? NSParagraphStyle,
+              let style = current.mutableCopy() as? NSMutableParagraphStyle else { return }
+        style.paragraphSpacingBefore = max(style.paragraphSpacingBefore, titleGap)
+        storage.addAttribute(.paragraphStyle, value: style, range: enclosing)
     }
 
     private static func hide(_ range: NSRange, in storage: NSTextStorage, isLinePrefix: Bool, result: inout StyleResult) {
