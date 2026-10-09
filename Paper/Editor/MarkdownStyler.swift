@@ -1,5 +1,12 @@
 #if os(macOS)
 import AppKit
+typealias PlatformFont = NSFont
+typealias PlatformColor = PlatformColor
+#else
+import UIKit
+typealias PlatformFont = UIFont
+typealias PlatformColor = UIColor
+#endif
 
 enum LineKind: Equatable {
     case title
@@ -66,9 +73,9 @@ extension NSAttributedString.Key {
 }
 
 enum MarkdownStyler {
-    static let textColor = NSColor.black
-    static let placeholderColor = NSColor.black.withAlphaComponent(0.25)
-    static let highlightColor = NSColor(red: 1.0, green: 0.88, blue: 0.35, alpha: 0.55)
+    static let textColor = PlatformColor.black
+    static let placeholderColor = PlatformColor.black.withAlphaComponent(0.25)
+    static let highlightColor = PlatformColor(red: 1.0, green: 0.88, blue: 0.35, alpha: 0.55)
     static let bodySize: CGFloat = 16
     static let bodyLineHeight: CGFloat = 26
     static let blockSpacing: CGFloat = 12
@@ -77,20 +84,22 @@ enum MarkdownStyler {
     static let numberIndent: CGFloat = 28
     static let todoIndent: CGFloat = 28
     static let checkboxSize: CGFloat = 16
-    static let secondaryTextColor = NSColor.black.withAlphaComponent(0.4)
+    static let secondaryTextColor = PlatformColor.black.withAlphaComponent(0.4)
     /// Space around the text on the page.
     static let pageInset: CGFloat = 56
 
-    static let bodyFont = NSFont.systemFont(ofSize: bodySize)
-    private static let titleFont = NSFont.systemFont(ofSize: 36, weight: .semibold)
-    private static let heading1Font = NSFont.systemFont(ofSize: 30, weight: .semibold)
-    private static let heading2Font = NSFont.systemFont(ofSize: 24, weight: .semibold)
-    private static let heading3Font = NSFont.systemFont(ofSize: 20, weight: .semibold)
+    static let bodyFont = PlatformFont.systemFont(ofSize: bodySize)
+    private static let titleFont = PlatformFont.systemFont(ofSize: 36, weight: .semibold)
+    private static let heading1Font = PlatformFont.systemFont(ofSize: 30, weight: .semibold)
+    private static let heading2Font = PlatformFont.systemFont(ofSize: 24, weight: .semibold)
+    private static let heading3Font = PlatformFont.systemFont(ofSize: 20, weight: .semibold)
     /// Hidden syntax keeps its characters but draws them invisibly at near-zero width.
-    private static let hiddenFont = NSFont.systemFont(ofSize: 0.01)
+    private static let hiddenFont = PlatformFont.systemFont(ofSize: 0.01)
+    #if os(macOS)
     private static let metrics = NSLayoutManager()
+    #endif
 
-    static func font(for kind: LineKind) -> NSFont {
+    static func font(for kind: LineKind) -> PlatformFont {
         switch kind {
         case .title: titleFont
         case .heading(1): heading1Font
@@ -237,8 +246,12 @@ enum MarkdownStyler {
         ]
     }
 
-    private static func naturalHeight(_ font: NSFont) -> CGFloat {
+    private static func naturalHeight(_ font: PlatformFont) -> CGFloat {
+        #if os(macOS)
         metrics.defaultLineHeight(for: font)
+        #else
+        font.lineHeight
+        #endif
     }
 
     /// Line box height per block type.
@@ -283,7 +296,7 @@ enum MarkdownStyler {
         storage.addAttributes([
             .paperHidden: true,
             .font: hiddenFont,
-            .foregroundColor: NSColor.clear,
+            .foregroundColor: PlatformColor.clear,
         ], range: range)
     }
 
@@ -325,10 +338,9 @@ enum MarkdownStyler {
     private static let strike = try! NSRegularExpression(pattern: "~~(?=\\S)(.+?)(?<=\\S)~~")
     private static let highlight = try! NSRegularExpression(pattern: "==(?=\\S)(.+?)(?<=\\S)==")
 
-    private static func styleInline(_ storage: NSTextStorage, range: NSRange, baseFont: NSFont, apply shouldApply: Bool,
+    private static func styleInline(_ storage: NSTextStorage, range: NSRange, baseFont: PlatformFont, apply shouldApply: Bool,
                                     result: inout StyleResult) {
         let text = storage.string
-        let manager = NSFontManager.shared
 
         func apply(_ regex: NSRegularExpression, markerLength: Int, _ body: (NSRange) -> Void) {
             for match in regex.matches(in: text, options: [], range: range) {
@@ -344,18 +356,18 @@ enum MarkdownStyler {
         // "Bold" is drawn in semibold: full bold reads too heavy on the page.
         apply(bold, markerLength: 2) { inner in
             storage.enumerateAttribute(.font, in: inner, options: []) { value, sub, _ in
-                let f = (value as? NSFont) ?? baseFont
-                var strong = NSFont.systemFont(ofSize: f.pointSize, weight: .semibold)
-                if manager.traits(of: f).contains(.italicFontMask) {
-                    strong = manager.convert(strong, toHaveTrait: .italicFontMask)
+                let f = (value as? PlatformFont) ?? baseFont
+                var strong = PlatformFont.systemFont(ofSize: f.pointSize, weight: .semibold)
+                if isItalicFont(f) {
+                    strong = italicFont(strong)
                 }
                 storage.addAttribute(.font, value: strong, range: sub)
             }
         }
         apply(italic, markerLength: 1) { inner in
             storage.enumerateAttribute(.font, in: inner, options: []) { value, sub, _ in
-                let f = (value as? NSFont) ?? baseFont
-                storage.addAttribute(.font, value: manager.convert(f, toHaveTrait: .italicFontMask), range: sub)
+                let f = (value as? PlatformFont) ?? baseFont
+                storage.addAttribute(.font, value: italicFont(f), range: sub)
             }
         }
         apply(strike, markerLength: 2) { inner in
@@ -365,9 +377,26 @@ enum MarkdownStyler {
             storage.addAttribute(.backgroundColor, value: highlightColor, range: inner)
         }
         apply(code, markerLength: 1) { inner in
-            storage.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: baseFont.pointSize - 1, weight: .regular), range: inner)
-            storage.addAttribute(.backgroundColor, value: NSColor.black.withAlphaComponent(0.05), range: inner)
+            storage.addAttribute(.font, value: PlatformFont.monospacedSystemFont(ofSize: baseFont.pointSize - 1, weight: .regular), range: inner)
+            storage.addAttribute(.backgroundColor, value: PlatformColor.black.withAlphaComponent(0.05), range: inner)
         }
     }
+
+    private static func isItalicFont(_ font: PlatformFont) -> Bool {
+        #if os(macOS)
+        NSFontManager.shared.traits(of: font).contains(.italicFontMask)
+        #else
+        font.fontDescriptor.symbolicTraits.contains(.traitItalic)
+        #endif
+    }
+
+    private static func italicFont(_ font: PlatformFont) -> PlatformFont {
+        #if os(macOS)
+        NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+        #else
+        let traits = font.fontDescriptor.symbolicTraits.union(.traitItalic)
+        guard let descriptor = font.fontDescriptor.withSymbolicTraits(traits) else { return font }
+        return UIFont(descriptor: descriptor, size: font.pointSize)
+        #endif
+    }
 }
-#endif

@@ -129,6 +129,7 @@ struct PaperLibraryView: View {
 struct PaperListView: View {
     let store: PaperStore
     let folderID: String?
+    @State private var newPaper: Document?
 
     var body: some View {
         List {
@@ -141,7 +142,7 @@ struct PaperListView: View {
             }
             ForEach(store.papers(in: folderID), id: \.persistentModelID) { paper in
                 NavigationLink {
-                    SimpleEditor(document: paper, store: store)
+                    PaperEditorScreen(document: paper, store: store)
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(paper.title.isEmpty ? "Untitled" : paper.title)
@@ -161,32 +162,50 @@ struct PaperListView: View {
         .toolbar {
             Button("New paper", systemImage: "square.and.pencil") {
                 let id = store.newPaper()
-                if let paper = store.document(for: id) { store.move(paper, to: folderID) }
+                if let paper = store.document(for: id) {
+                    store.move(paper, to: folderID)
+                    newPaper = paper
+                }
             }
+        }
+        .navigationDestination(item: $newPaper) { paper in
+            PaperEditorScreen(document: paper, store: store)
         }
     }
 }
 
-/// Plain text for now; the full editor comes next.
-struct SimpleEditor: View {
+/// One paper, full screen, with the same editor as the Mac.
+struct PaperEditorScreen: View {
     let document: Document
     let store: PaperStore
-    @State private var text = ""
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        TextEditor(text: $text)
-            .font(.system(size: 17))
-            .foregroundStyle(Color.black)
-            .scrollContentBackground(.hidden)
-            .padding(24)
+        PaperEditorView(document: document, store: store)
+            .id(document.persistentModelID)
+            .ignoresSafeArea(.container, edges: .bottom)
             .background(Color.white)
-            .onAppear { text = document.markdown }
-            .onChange(of: text) { _, newValue in
-                if newValue != document.markdown { document.markdown = newValue }
-            }
-            .onDisappear { store.writeFiles() }
-            .onReceive(NotificationCenter.default.publisher(for: .paperChangedOnDisk, object: document)) { _ in
-                text = document.markdown
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color.white, for: .navigationBar)
+            .toolbar {
+                Menu {
+                    Picker("Paper style", selection: Binding(
+                        get: { document.paperStyle },
+                        set: { store.setStyle($0, for: document) }
+                    )) {
+                        ForEach(PaperStyle.allCases) { style in
+                            Text(style.label).tag(style)
+                        }
+                    }
+                    Button("Delete paper", systemImage: "trash", role: .destructive) {
+                        dismiss()
+                        // Let the editor close (and save) before the paper goes away.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { store.delete(document) }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .tint(.black)
             }
     }
 }
