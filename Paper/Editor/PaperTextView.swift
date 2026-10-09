@@ -798,16 +798,18 @@ final class FormatToolbar: NSView {
         turnIntoButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
         turnIntoButton.imagePosition = .imageTrailing
+        // Keep the chevron beside the label; the pair is centred, leaving room at both edges.
+        turnIntoButton.imageHugsTitle = true
         turnIntoButton.refusesFirstResponder = true
         turnIntoButton.target = self
         turnIntoButton.action = #selector(showTurnIntoMenu)
         turnIntoButton.toolTip = "Turn into"
         turnIntoButton.heightAnchor.constraint(equalToConstant: 32).isActive = true
-        turnIntoButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 96).isActive = true
+        turnIntoButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 112).isActive = true
 
         stack.orientation = .horizontal
         stack.spacing = 4
-        stack.edgeInsets = NSEdgeInsets(top: 6, left: 8, bottom: 6, right: 8)
+        stack.edgeInsets = NSEdgeInsets(top: 6, left: 6, bottom: 6, right: 6)
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(turnIntoButton)
         stack.addArrangedSubview(separator())
