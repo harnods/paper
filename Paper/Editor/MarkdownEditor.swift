@@ -8,9 +8,6 @@ final class PaperClipView: NSClipView {
         didSet { if style != oldValue { needsDisplay = true } }
     }
 
-    private static let spacing: CGFloat = 26
-    private static let topOffset: CGFloat = 20
-
     private static let grain: NSColor = {
         let size = 128
         guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size,
@@ -40,30 +37,35 @@ final class PaperClipView: NSClipView {
         Self.grain.setFill()
         dirtyRect.fill(using: .sourceOver)
 
-        let spacing = Self.spacing
-        let firstRow = max(0, ((dirtyRect.minY - Self.topOffset) / spacing).rounded(.down))
-        var y = Self.topOffset + firstRow * spacing
+        // Rows line up with the text: they start at the page inset, one row per body line.
+        let unit = MarkdownStyler.gridUnit
+        let origin = MarkdownStyler.pageInset
+        let firstRow = ((dirtyRect.minY - origin) / unit).rounded(.down) - 1
 
         switch style {
         case .plain:
             break
         case .dotted:
-            NSColor.black.withAlphaComponent(0.2).setFill()
-            let dot: CGFloat = 2.6
-            let columns = Int(bounds.width / spacing)
-            let startX = (bounds.width - CGFloat(columns - 1) * spacing) / 2
-            while y < dirtyRect.maxY + spacing {
-                for column in 0..<columns {
-                    let x = startX + CGFloat(column) * spacing
+            NSColor.black.withAlphaComponent(0.34).setFill()
+            let dot: CGFloat = 3
+            let columns = Int(bounds.width / unit)
+            var row = firstRow
+            while origin + row * unit < dirtyRect.maxY + unit {
+                let y = origin + row * unit
+                for column in 1..<max(columns, 1) {
+                    let x = CGFloat(column) * unit
                     NSBezierPath(ovalIn: NSRect(x: x - dot / 2, y: y - dot / 2, width: dot, height: dot)).fill()
                 }
-                y += spacing
+                row += 1
             }
         case .lines:
-            NSColor(red: 0.35, green: 0.55, blue: 0.85, alpha: 0.22).setFill()
-            while y < dirtyRect.maxY + spacing {
-                NSRect(x: dirtyRect.minX, y: y.rounded(), width: dirtyRect.width, height: 1).fill()
-                y += spacing
+            // Each ruled line sits where a row's text baseline is, so writing rests on the line.
+            NSColor(red: 0.28, green: 0.48, blue: 0.80, alpha: 0.5).setFill()
+            var row = firstRow
+            while origin + row * unit < dirtyRect.maxY + unit {
+                let y = (origin + row * unit + MarkdownStyler.gridBaseline).rounded()
+                NSRect(x: dirtyRect.minX, y: y, width: dirtyRect.width, height: 1).fill()
+                row += 1
             }
         }
     }
@@ -155,7 +157,7 @@ struct MarkdownEditor: NSViewRepresentable {
         textView.autoresizingMask = [.width]
         textView.minSize = .zero
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.textContainerInset = NSSize(width: 56, height: 56)
+        textView.textContainerInset = NSSize(width: MarkdownStyler.pageInset, height: MarkdownStyler.pageInset)
         textView.insertionPointColor = .black
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
@@ -189,6 +191,7 @@ struct MarkdownEditor: NSViewRepresentable {
         scrollView.addSubview(chip)
         context.coordinator.attachChip(chip, to: scrollView, textView: textView)
 
+        textView.paperStyle = style
         textView.string = document.markdown
         textView.restyle()
         textView.undoManager?.removeAllActions()
@@ -202,6 +205,7 @@ struct MarkdownEditor: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         (scrollView.contentView as? PaperClipView)?.style = style
+        (scrollView.documentView as? PaperTextView)?.paperStyle = style
     }
 
     @MainActor
