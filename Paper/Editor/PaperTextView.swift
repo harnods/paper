@@ -1,8 +1,9 @@
 #if os(macOS)
 import AppKit
 
-final class PaperTextView: NSTextView {
+final class PaperTextView: NSTextView, NSLayoutManagerDelegate {
     private(set) var lineKinds: [LineKind] = []
+    private var hiddenRanges: [HiddenRange] = []
     private var hoveredLine: Int?
     private var dropIndicatorY: CGFloat?
     private var isDraggingBlock = false
@@ -37,9 +38,63 @@ final class PaperTextView: NSTextView {
 
     func restyle() {
         guard let storage = textStorage else { return }
-        lineKinds = MarkdownStyler.style(storage)
-        typingAttributes = MarkdownStyler.baseAttributes(for: .body, markerWidth: 0)
+        let result = MarkdownStyler.style(storage)
+        lineKinds = result.kinds
+        hiddenRanges = result.hidden
+        let full = NSRange(location: 0, length: storage.length)
+        layoutManager?.invalidateGlyphs(forCharacterRange: full, changeInLength: 0, actualCharacterRange: nil)
+        layoutManager?.invalidateLayout(forCharacterRange: full, actualCharacterRange: nil)
+        typingAttributes = MarkdownStyler.attributes(for: .body)
         needsDisplay = true
+    }
+
+    // MARK: Hidden syntax
+
+    /// Markdown syntax marked hidden gets null glyphs, so it takes no space and isn't drawn.
+    func layoutManager(_ layoutManager: NSLayoutManager,
+                       shouldGenerateGlyphs glyphs: UnsafePointer<CGGlyph>,
+                       properties props: UnsafePointer<NSLayoutManager.GlyphProperty>,
+                       characterIndexes charIndexes: UnsafePointer<Int>,
+                       font aFont: NSFont,
+                       forGlyphRange glyphRange: NSRange) -> Int {
+        guard let storage = layoutManager.textStorage else { return 0 }
+        var properties = Array(UnsafeBufferPointer(start: props, count: glyphRange.length))
+        var changed = false
+        for i in 0..<glyphRange.length {
+            let index = charIndexes[i]
+            guard index < storage.length,
+                  storage.attribute(.paperHidden, at: index, effectiveRange: nil) != nil else { continue }
+            properties[i] = .null
+            changed = true
+        }
+        guard changed else { return 0 }
+        properties.withUnsafeBufferPointer { buffer in
+            layoutManager.setGlyphs(glyphs, properties: buffer.baseAddress!, characterIndexes: charIndexes,
+                                    font: aFont, forGlyphRange: glyphRange)
+        }
+        return glyphRange.length
+    }
+
+    override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        // Hidden ranges are stale until the edit is restyled; don't snap against them meanwhile.
+        hiddenRanges = []
+        return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+    }
+
+    /// Keeps the caret out of hidden syntax so arrow keys never seem to stick.
+    private func snappedCaret(_ location: Int, from old: Int) -> Int {
+        for hidden in hiddenRanges {
+            let start = hidden.range.location
+            let end = NSMaxRange(hidden.range)
+            if hidden.isLinePrefix {
+                guard location >= start, location < end else { continue }
+                if location == old - 1, start > 0 { return start - 1 }
+                return end
+            } else if location > start, location < end {
+                return location < old ? start : end
+            }
+        }
+        return location
     }
 
     /// Replaces text through the normal editing path so undo works.
@@ -267,31 +322,61 @@ final class PaperTextView: NSTextView {
 
     // MARK: Geometry
 
-    func rectForLine(at location: Int) -> NSRect? {
-        guard let layoutManager, let textContainer else { return nil }
-        let ns = nsString
-        var rect: NSRect
-        if location >= ns.length {
-            rect = layoutManager.extraLineFragmentRect
-            if rect.isEmpty, ns.length > 0 {
-                let glyph = layoutManager.glyphIndexForCharacter(at: ns.length - 1)
-                rect = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-            }
-        } else {
-            let range = ns.paragraphRange(for: NSRange(location: location, length: 0))
-            let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
-        }
-        rect.origin.x = textContainerOrigin.x + textContainer.lineFragmentPadding
-        rect.size.width = textContainer.size.width - textContainer.lineFragmentPadding * 2
-        rect.origin.y += textContainerOrigin.y
-        return rect
+    struct LineGeometry {
+        /// The whole paragraph, including spacing around it.
+        var fragment: NSRect
+        /// The text area, without paragraph spacing.
+        var content: NSRect
+        /// The first visual line of the text area.
+        var firstLine: NSRect
     }
 
-    private func firstLineHeight(at location: Int) -> CGFloat {
-        guard let layoutManager, location < nsString.length else { return MarkdownStyler.bodyLineHeight }
-        let glyph = layoutManager.glyphIndexForCharacter(at: location)
-        return layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).height
+    func geometry(forLineAt location: Int) -> LineGeometry? {
+        guard let layoutManager, let textContainer else { return nil }
+        let ns = nsString
+        var fragments: [NSRect] = []
+        if location >= ns.length {
+            var rect = layoutManager.extraLineFragmentRect
+            if rect.isEmpty {
+                rect = NSRect(x: 0, y: 0, width: textContainer.size.width, height: MarkdownStyler.bodyLineHeight)
+            }
+            fragments = [rect]
+        } else {
+            let paragraph = ns.paragraphRange(for: NSRange(location: location, length: 0))
+            let glyphs = layoutManager.glyphRange(forCharacterRange: paragraph, actualCharacterRange: nil)
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, _, _ in
+                fragments.append(rect)
+            }
+        }
+        guard let first = fragments.first else { return nil }
+        let union = fragments.dropFirst().reduce(first) { $0.union($1) }
+
+        let style = location < ns.length
+            ? textStorage?.attribute(.paragraphStyle, at: location, effectiveRange: nil) as? NSParagraphStyle
+            : nil
+        let before = style?.paragraphSpacingBefore ?? 0
+        let lineSpacing = style?.lineSpacing ?? 0
+        let after = (style?.paragraphSpacing ?? 0) + lineSpacing
+        let padding = textContainer.lineFragmentPadding
+
+        func toView(_ rect: NSRect) -> NSRect {
+            NSRect(x: textContainerOrigin.x + padding, y: rect.minY + textContainerOrigin.y,
+                   width: textContainer.size.width - padding * 2, height: rect.height)
+        }
+
+        var content = toView(union)
+        content.origin.y += before
+        content.size.height = max(0, content.height - before - after)
+
+        var firstLine = toView(first)
+        firstLine.origin.y += before
+        firstLine.size.height = max(0, firstLine.height - before - (fragments.count == 1 ? after : lineSpacing))
+
+        return LineGeometry(fragment: toView(union), content: content, firstLine: firstLine)
+    }
+
+    func rectForLine(at location: Int) -> NSRect? {
+        geometry(forLineAt: location)?.content
     }
 
     private func lineIndex(atPoint point: NSPoint) -> Int {
@@ -301,9 +386,8 @@ final class PaperTextView: NSTextView {
     }
 
     private func handleRect(forLine index: Int, ranges: [NSRange]) -> NSRect? {
-        guard index < ranges.count, let rect = rectForLine(at: ranges[index].location) else { return nil }
-        let height = min(rect.height, firstLineHeight(at: ranges[index].location))
-        return NSRect(x: rect.minX - handleWidth - 10, y: rect.minY, width: handleWidth, height: height)
+        guard index < ranges.count, let line = geometry(forLineAt: ranges[index].location)?.firstLine else { return nil }
+        return NSRect(x: line.minX - handleWidth - 10, y: line.minY, width: handleWidth, height: max(line.height, 18))
     }
 
     private func plusRect(forLine index: Int, ranges: [NSRange]) -> NSRect? {
@@ -411,25 +495,30 @@ final class PaperTextView: NSTextView {
         let ranges = lineRanges()
 
         for (index, kind) in lineKinds.enumerated() where index < ranges.count {
-            guard kind == .divider || kind == .callout || kind == .quote,
-                  let lineRect = rectForLine(at: ranges[index].location) else { continue }
+            guard kind != .body, kind != .title, let line = geometry(forLineAt: ranges[index].location) else { continue }
+            let content = line.content
             switch kind {
             case .divider:
-                let y = lineRect.midY.rounded() + 0.5
-                let path = NSBezierPath()
-                path.move(to: NSPoint(x: lineRect.minX, y: y))
-                path.line(to: NSPoint(x: lineRect.maxX, y: y))
-                path.lineWidth = 1
-                NSColor.black.withAlphaComponent(0.12).setStroke()
-                path.stroke()
+                let y = content.midY.rounded() + 0.5
+                NSColor.black.withAlphaComponent(0.12).setFill()
+                NSRect(x: content.minX, y: y - 0.5, width: content.width, height: 1).fill()
             case .callout:
-                let box = lineRect.insetBy(dx: -10, dy: -4)
+                let box = NSRect(x: content.minX, y: content.minY - 8, width: content.width, height: content.height + 16)
                 NSColor.black.withAlphaComponent(0.04).setFill()
-                NSBezierPath(roundedRect: box, xRadius: 8, yRadius: 8).fill()
+                NSBezierPath(roundedRect: box, xRadius: 6, yRadius: 6).fill()
+                ("\u{1F4A1}" as NSString).draw(at: NSPoint(x: content.minX + 12, y: line.firstLine.minY),
+                                                withAttributes: [.font: MarkdownStyler.bodyFont])
             case .quote:
-                let bar = NSRect(x: lineRect.minX - 12, y: lineRect.minY + 3, width: 3, height: lineRect.height - 6)
-                NSColor.black.withAlphaComponent(0.15).setFill()
-                NSBezierPath(roundedRect: bar, xRadius: 1.5, yRadius: 1.5).fill()
+                let bar = NSRect(x: content.minX + 2, y: content.minY + 1, width: 3, height: max(content.height - 2, 0))
+                NSColor.black.withAlphaComponent(0.85).setFill()
+                bar.fill()
+            case .bullet:
+                let info = MarkdownStyler.parse(nsString.substring(with: ranges[index]), isFirst: false)
+                let x = content.minX + CGFloat(info.level) * MarkdownStyler.listIndent + 7
+                ("\u{2022}" as NSString).draw(at: NSPoint(x: x, y: line.firstLine.minY), withAttributes: [
+                    .font: MarkdownStyler.bodyFont,
+                    .foregroundColor: MarkdownStyler.textColor,
+                ])
             default:
                 break
             }
@@ -439,25 +528,34 @@ final class PaperTextView: NSTextView {
     }
 
     private func drawPlaceholders(ranges: [NSRange]) {
-        let ns = nsString
-        if ns.length == 0 || (ranges.first?.length ?? 0) == 0 {
-            let origin = NSPoint(x: textContainerOrigin.x + (textContainer?.lineFragmentPadding ?? 0),
-                                 y: textContainerOrigin.y)
-            ("Untitled" as NSString).draw(at: origin, withAttributes: [
-                .font: MarkdownStyler.font(for: .title),
+        let isFocused = window?.firstResponder === self && selectedRange().length == 0
+        let caretLine = lineIndex(at: selectedRange().location, in: ranges)
+
+        for (index, range) in ranges.enumerated() {
+            let info = MarkdownStyler.parse(nsString.substring(with: range), isFirst: index == 0)
+            guard range.length == info.markerLength else { continue }
+
+            let text: String
+            if index == 0 {
+                text = "Untitled"
+            } else if let placeholder = info.kind.placeholder, info.markerLength > 0 {
+                text = placeholder
+            } else if info.kind == .body, isFocused, index == caretLine {
+                text = "Type / for commands"
+            } else {
+                continue
+            }
+
+            guard let line = geometry(forLineAt: range.location) else { continue }
+            let style = range.location < nsString.length
+                ? textStorage?.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle
+                : nil
+            let x = line.content.minX + max(style?.firstLineHeadIndent ?? 0, style?.headIndent ?? 0)
+            (text as NSString).draw(at: NSPoint(x: x, y: line.firstLine.minY), withAttributes: [
+                .font: MarkdownStyler.font(for: info.kind),
                 .foregroundColor: MarkdownStyler.placeholderColor,
             ])
         }
-
-        guard window?.firstResponder === self, selectedRange().length == 0 else { return }
-        let index = lineIndex(at: selectedRange().location, in: ranges)
-        guard index > 0, ranges[index].length == 0, let rect = rectForLine(at: ranges[index].location) else { return }
-        let font = MarkdownStyler.bodyFont
-        let y = rect.minY + (min(rect.height, MarkdownStyler.bodyLineHeight) - font.ascender + font.descender) / 2
-        ("Type / for commands" as NSString).draw(at: NSPoint(x: rect.minX, y: y), withAttributes: [
-            .font: font,
-            .foregroundColor: MarkdownStyler.placeholderColor,
-        ])
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -497,6 +595,13 @@ final class PaperTextView: NSTextView {
     }
 
     override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        var ranges = ranges
+        if !stillSelecting, ranges.count == 1, let range = ranges.first?.rangeValue, range.length == 0 {
+            let snapped = snappedCaret(range.location, from: selectedRange().location)
+            if snapped != range.location {
+                ranges = [NSValue(range: NSRange(location: snapped, length: 0))]
+            }
+        }
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
         needsDisplay = true
     }
