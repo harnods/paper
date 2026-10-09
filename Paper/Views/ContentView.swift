@@ -2,8 +2,10 @@ import SwiftUI
 import SwiftData
 
 enum PaperLayout {
-    static let windowSize = CGSize(width: 720, height: 890)
     static let paperSize = CGSize(width: 660, height: 830)
+    /// The window is exactly the paper, so system highlights (Mission Control, App Exposé) hug it;
+    /// the shadow comes from the window itself, which follows the paper's rounded shape.
+    static let windowSize = paperSize
     static let cornerRadius: CGFloat = 28
 }
 
@@ -40,8 +42,6 @@ struct ContentView: View {
                 RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous)
                     .fill(Color.white)
                     .frame(width: PaperLayout.paperSize.width, height: PaperLayout.paperSize.height)
-                    .shadow(color: .black.opacity(0.08), radius: 16, x: 0, y: 6)
-                    .shadow(color: .black.opacity(0.04), radius: 1, x: 0, y: 1)
 
                 MarkdownEditor(document: doc, style: doc.paperStyle, store: store, actions: actions(for: doc))
                     .id(doc.persistentModelID)
@@ -49,10 +49,10 @@ struct ContentView: View {
                     .clipShape(RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous))
                     .focusedSceneValue(\.paperDocument, doc)
 
-                // Hairline just outside the paper's edge, so it never covers the text area.
-                RoundedRectangle(cornerRadius: PaperLayout.cornerRadius + 1, style: .continuous)
+                // Hairline on the paper's edge.
+                RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous)
                     .strokeBorder(Color.black.opacity(0.1), lineWidth: 1)
-                    .frame(width: PaperLayout.paperSize.width + 2, height: PaperLayout.paperSize.height + 2)
+                    .frame(width: PaperLayout.paperSize.width, height: PaperLayout.paperSize.height)
                     .allowsHitTesting(false)
             }
         }
