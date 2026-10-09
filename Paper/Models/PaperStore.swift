@@ -2,6 +2,37 @@ import Foundation
 import SwiftData
 import Observation
 
+/// One store shared by the app window and Siri / Shortcuts actions.
+@MainActor
+enum PaperData {
+    static let container = makeContainer()
+    static let store = PaperStore(context: container.mainContext)
+
+    /// Opens the store; if an old store can't be migrated, moves it aside as a backup and starts fresh.
+    private static func makeContainer() -> ModelContainer {
+        let configuration = ModelConfiguration()
+        if let container = try? ModelContainer(for: Document.self, configurations: configuration) {
+            return container
+        }
+
+        let fileManager = FileManager.default
+        let storeURL = configuration.url
+        let stamp = Int(Date().timeIntervalSince1970)
+        for suffix in ["", "-shm", "-wal"] {
+            let file = URL(fileURLWithPath: storeURL.path + suffix)
+            guard fileManager.fileExists(atPath: file.path) else { continue }
+            let backup = URL(fileURLWithPath: storeURL.path + ".backup-\(stamp)" + suffix)
+            try? fileManager.moveItem(at: file, to: backup)
+        }
+
+        do {
+            return try ModelContainer(for: Document.self, configurations: configuration)
+        } catch {
+            fatalError("Could not open the paper store: \(error)")
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class PaperStore {
@@ -30,6 +61,19 @@ final class PaperStore {
 
     func newPaper() {
         let doc = Document(paperStyle: current?.paperStyle ?? .dotted)
+        context.insert(doc)
+        try? context.save()
+        reload()
+        currentID = doc.persistentModelID
+    }
+
+    /// Puts text on a new paper on top, replacing the current paper if it is blank.
+    func addPaper(with text: String) {
+        let style = current?.paperStyle ?? .dotted
+        if let blank = current, blank.markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            context.delete(blank)
+        }
+        let doc = Document(content: text, paperStyle: style)
         context.insert(doc)
         try? context.save()
         reload()
