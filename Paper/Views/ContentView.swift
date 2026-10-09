@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 enum PaperLayout {
-    static let windowSize = CGSize(width: 720, height: 900)
+    static let windowSize = CGSize(width: 720, height: 890)
     static let paperSize = CGSize(width: 660, height: 830)
     static let cornerRadius: CGFloat = 28
 }
@@ -12,9 +12,7 @@ struct ContentView: View {
 
     var body: some View {
         #if os(macOS)
-        ZStack(alignment: .top) {
-            StackedSheets(count: min(store.papersBehind, 2))
-
+        ZStack {
             RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous)
                 .fill(Color.white)
                 .frame(width: PaperLayout.paperSize.width, height: PaperLayout.paperSize.height)
@@ -28,8 +26,7 @@ struct ContentView: View {
                     .clipShape(RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous))
             }
         }
-        .padding(.top, 20)
-        .frame(width: PaperLayout.windowSize.width, height: PaperLayout.windowSize.height, alignment: .top)
+        .frame(width: PaperLayout.windowSize.width, height: PaperLayout.windowSize.height)
         .preferredColorScheme(.light)
         #else
         if let doc = store.current {
@@ -40,28 +37,7 @@ struct ContentView: View {
     }
 }
 
-#if os(macOS)
-/// Papers peeking out below the current one.
-struct StackedSheets: View {
-    let count: Int
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            ForEach((0..<count).reversed(), id: \.self) { index in
-                let depth = CGFloat(index + 1)
-                RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous)
-                    .fill(Color(white: 1 - 0.025 * Double(index + 1)))
-                    .frame(width: PaperLayout.paperSize.width - 18 * depth,
-                           height: PaperLayout.paperSize.height)
-                    .rotationEffect(.degrees(index == 0 ? -0.8 : 1.1))
-                    .offset(y: 9 * depth)
-                    .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 4)
-            }
-        }
-        .animation(.easeOut(duration: 0.2), value: count)
-    }
-}
-#else
+#if os(iOS)
 struct SimpleEditor: View {
     @Bindable var document: Document
     @State private var text = ""

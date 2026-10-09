@@ -54,11 +54,6 @@ final class PaperStore {
         documents.first { $0.persistentModelID == currentID } ?? documents.first
     }
 
-    /// Papers stacked behind the current one, nearest first.
-    var papersBehind: Int {
-        max(documents.count - 1, 0)
-    }
-
     func newPaper() {
         let doc = Document(paperStyle: current?.paperStyle ?? .dotted)
         context.insert(doc)
