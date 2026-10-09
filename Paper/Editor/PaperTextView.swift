@@ -5,6 +5,8 @@ final class PaperTextView: NSTextView {
     private(set) var lineKinds: [LineKind] = []
     private var hiddenRanges: [HiddenRange] = []
     private lazy var formatToolbar = FormatToolbar(textView: self)
+    /// Selection left by a style action; the toolbar stays closed until the selection changes.
+    private var dismissedSelection: NSRange?
     private var hoveredLine: Int?
     private var dropIndicatorY: CGFloat?
     private var isDraggingBlock = false
@@ -258,6 +260,7 @@ final class PaperTextView: NSTextView {
             let outer = NSRange(location: sel.location - m, length: sel.length + 2 * m)
             replace(outer, with: inner)
             setSelectedRange(NSRange(location: sel.location - m, length: sel.length))
+            dismissFormatToolbar()
             return
         }
         if sel.length > 0, leftRun != marker, syntaxRun(leftRun, hasMarker: marker, atEnd: false),
@@ -267,11 +270,18 @@ final class PaperTextView: NSTextView {
             let newRight = String(rightRun.dropLast(marker.count))
             replace(span, with: newLeft + inner + newRight)
             setSelectedRange(NSRange(location: left + (newLeft as NSString).length, length: sel.length))
+            dismissFormatToolbar()
             return
         }
 
         replace(sel, with: marker + inner + marker)
         setSelectedRange(NSRange(location: sel.location + m, length: sel.length))
+        dismissFormatToolbar()
+    }
+
+    private func dismissFormatToolbar() {
+        dismissedSelection = selectedRange()
+        formatToolbar.isHidden = true
     }
 
     @objc func setLineText(_ sender: Any?) { setLinePrefix("") }
@@ -681,6 +691,13 @@ final class PaperTextView: NSTextView {
 
     private func updateFormatToolbar() {
         let selection = selectedRange()
+        if let dismissed = dismissedSelection {
+            if dismissed == selection {
+                formatToolbar.isHidden = true
+                return
+            }
+            dismissedSelection = nil
+        }
         guard selection.length > 0, window?.firstResponder === self,
               let layoutManager, let textContainer else {
             formatToolbar.isHidden = true
