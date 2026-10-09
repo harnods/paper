@@ -48,6 +48,12 @@ struct ContentView: View {
                     .frame(width: PaperLayout.paperSize.width, height: PaperLayout.paperSize.height)
                     .clipShape(RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous))
                     .focusedSceneValue(\.paperDocument, doc)
+
+                // Hairline just outside the paper's edge, so it never covers the text area.
+                RoundedRectangle(cornerRadius: PaperLayout.cornerRadius + 1, style: .continuous)
+                    .strokeBorder(Color.black.opacity(0.1), lineWidth: 1)
+                    .frame(width: PaperLayout.paperSize.width + 2, height: PaperLayout.paperSize.height + 2)
+                    .allowsHitTesting(false)
             }
         }
         .frame(width: PaperLayout.windowSize.width, height: PaperLayout.windowSize.height)
