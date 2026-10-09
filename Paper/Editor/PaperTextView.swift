@@ -52,8 +52,15 @@ final class PaperTextView: NSTextView {
         let full = NSRange(location: 0, length: storage.length)
         layoutManager?.invalidateGlyphs(forCharacterRange: full, changeInLength: 0, actualCharacterRange: nil)
         layoutManager?.invalidateLayout(forCharacterRange: full, actualCharacterRange: nil)
-        typingAttributes = MarkdownStyler.attributes(for: .body, grid: isGrid)
+        updateTypingAttributes()
         needsDisplay = true
+    }
+
+    /// An empty paper has no characters to take styling from, so its empty line would be laid out
+    /// (and the caret drawn) as body text; give it the title style instead.
+    private func updateTypingAttributes() {
+        let kind: LineKind = (textStorage?.length ?? 0) == 0 ? .title : .body
+        typingAttributes = MarkdownStyler.attributes(for: kind, grid: isGrid)
     }
 
     // MARK: Hidden syntax
@@ -410,7 +417,8 @@ final class PaperTextView: NSTextView {
     }
 
     private func handleRect(forLine index: Int, ranges: [NSRange]) -> NSRect? {
-        guard index < ranges.count, let line = geometry(forLineAt: ranges[index].location)?.firstLine else { return nil }
+        // The title is always first and has no other type, so it gets no + or drag handle.
+        guard index > 0, index < ranges.count, let line = geometry(forLineAt: ranges[index].location)?.firstLine else { return nil }
         return NSRect(x: line.minX - handleWidth - 10, y: line.minY, width: handleWidth, height: max(line.height, 18))
     }
 
@@ -680,6 +688,7 @@ final class PaperTextView: NSTextView {
             }
         }
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        if (textStorage?.length ?? 0) == 0 { updateTypingAttributes() }
         needsDisplay = true
         if stillSelecting {
             formatToolbar.isHidden = true
