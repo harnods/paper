@@ -11,36 +11,36 @@ final class Document {
     var paperStyleRaw: String
 
     var paperStyle: PaperStyle {
-        get { PaperStyle(rawValue: paperStyleRaw) ?? .plain }
+        get { PaperStyle(rawValue: paperStyleRaw) ?? .dotted }
         set { paperStyleRaw = newValue.rawValue }
     }
 
-    var blocks: [Block] {
+    /// Markdown source. Older documents stored blocks as JSON; convert them once on read.
+    var markdown: String {
         get {
-            guard !blocksJSON.isEmpty,
-                  let data = blocksJSON.data(using: .utf8),
-                  let decoded = try? JSONDecoder().decode([Block].self, from: data) else {
-                if !content.isEmpty {
-                    return [Block(type: .paragraph, content: content)]
-                }
-                return [Block()]
+            if content.isEmpty, !blocksJSON.isEmpty,
+               let data = blocksJSON.data(using: .utf8),
+               let blocks = try? JSONDecoder().decode([Block].self, from: data) {
+                let body = blocks.map(\.markdown).joined(separator: "\n")
+                return title.isEmpty ? body : title + "\n" + body
             }
-            return decoded.isEmpty ? [Block()] : decoded
+            return content
         }
         set {
-            if let data = try? JSONEncoder().encode(newValue),
-               let json = String(data: data, encoding: .utf8) {
-                blocksJSON = json
-            }
+            content = newValue
+            blocksJSON = ""
+            title = Document.title(from: newValue)
+            updatedAt = Date()
         }
     }
 
-    init(
-        title: String = "",
-        content: String = "",
-        paperStyle: PaperStyle = .plain
-    ) {
-        self.title = title
+    static func title(from markdown: String) -> String {
+        let firstLine = markdown.split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
+        return firstLine.drop(while: { $0 == "#" || $0 == " " }).trimmingCharacters(in: .whitespaces)
+    }
+
+    init(content: String = "", paperStyle: PaperStyle = .dotted) {
+        self.title = Document.title(from: content)
         self.content = content
         self.blocksJSON = ""
         self.createdAt = Date()

@@ -1,4 +1,4 @@
-import SwiftUI
+import Foundation
 
 enum PaperStyle: String, CaseIterable, Identifiable {
     case plain
@@ -11,15 +11,7 @@ enum PaperStyle: String, CaseIterable, Identifiable {
         switch self {
         case .plain: "Plain"
         case .dotted: "Dotted"
-        case .lines: "Lines"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .plain: "doc"
-        case .dotted: "circle.grid.3x3"
-        case .lines: "line.3.horizontal"
+        case .lines: "Ruled"
         }
     }
 }
