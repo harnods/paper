@@ -529,63 +529,115 @@ struct AllPapersView: View {
     }
 }
 
-/// A blue folder. Empty folders are just the folder; folders with something in them show a sheet
-/// peeking out of the pocket. When the carousel turns it (`tilt`, in degrees), its layers shift
-/// against each other and the pocket shows an edge, so it reads as a solid object, not a flat card.
+/// A blue folder with volume. Empty folders are just the folder; folders with something in them
+/// show a sheet in the pocket and are thicker. When the carousel turns it (`tilt`, in degrees), the
+/// back panel separates from the pocket and a shaded side wall fills the gap, so it reads as a solid
+/// object; lighting on the pocket shifts with the turn.
 struct FolderCard: View {
     let isEmpty: Bool
     var tilt: Double = 0
 
-    private static let backBlue = Color(red: 0.22, green: 0.50, blue: 0.86)
-    private static let edgeBlue = Color(red: 0.16, green: 0.40, blue: 0.74)
-    private static let pocketTop = Color(red: 0.42, green: 0.72, blue: 0.98)
-    private static let pocketBottom = Color(red: 0.25, green: 0.56, blue: 0.92)
+    private static let backBlue = Color(red: 0.20, green: 0.47, blue: 0.84)
+    private static let pocketTop = Color(red: 0.45, green: 0.75, blue: 1.0)
+    private static let pocketBottom = Color(red: 0.22, green: 0.52, blue: 0.90)
+    private static let wallLight = Color(red: 0.16, green: 0.38, blue: 0.72)
+    private static let wallDark = Color(red: 0.09, green: 0.25, blue: 0.52)
+    private static let baseBlue = Color(red: 0.12, green: 0.32, blue: 0.64)
 
     var body: some View {
         GeometryReader { geometry in
-            let width = geometry.size.width
-            let height = width * 0.78
-            let pocketHeight = height * 0.72
-            // Positive for cards on the left (their right edge faces the middle), negative on the right.
+            let width = geometry.size.width * 0.9
+            let height = width * 0.8
+            let pocketTopY = height * 0.3
+            let pocketHeight = height - pocketTopY
+            // Positive for cards on the left (their right side faces the middle), negative on the right.
             let turn = CGFloat(sin(tilt * .pi / 180))
-            let thickness = turn * 12
-            let pocketShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+            // How far apart the back and the pocket appear; a full folder is thicker.
+            let depth = (isEmpty ? 26 : 40) * turn
+            let pocketShape = RoundedRectangle(cornerRadius: 18, style: .continuous)
 
             ZStack(alignment: .topLeading) {
-                FolderBackShape(tabWidth: width * 0.4, tabHeight: height * 0.12, radius: 14)
-                    .fill(Self.backBlue)
+                // Back panel, pushed toward the side that faces the viewer.
+                FolderBackShape(tabWidth: width * 0.4, tabHeight: height * 0.12, radius: 16)
+                    .fill(LinearGradient(colors: [Self.backBlue, Self.backBlue.opacity(0.85)],
+                                         startPoint: .top, endPoint: .bottom))
                     .frame(width: width, height: height)
-                    .offset(x: -thickness * 0.6)
+                    .offset(x: depth / 2)
+
+                // Inside the folder: darker toward the bottom, where the pocket shades it.
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(LinearGradient(colors: [.clear, .black.opacity(0.25)], startPoint: .top, endPoint: .bottom))
+                    .frame(width: width * 0.96, height: height * 0.62)
+                    .offset(x: width * 0.02 + depth / 2, y: height * 0.36)
 
                 if !isEmpty {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(LinearGradient(colors: [.white, Color(white: 0.9)], startPoint: .top, endPoint: .bottom))
-                        .frame(width: width * 0.88, height: height * 0.42)
-                        .offset(x: width * 0.06 - thickness * 0.3, y: height * 0.17)
-                        .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+                        .fill(LinearGradient(colors: [.white, Color(white: 0.86)], startPoint: .top, endPoint: .bottom))
+                        .frame(width: width * 0.86, height: height * 0.42)
+                        .offset(x: width * 0.07 + depth * 0.15, y: height * 0.18)
+                        .shadow(color: .black.opacity(0.2), radius: 3, y: 2)
                 }
 
-                // The pocket's edge, seen when the folder is turned.
-                pocketShape
-                    .fill(Self.edgeBlue)
-                    .frame(width: width, height: pocketHeight)
-                    .offset(x: thickness, y: height - pocketHeight)
-                    .opacity(abs(turn) > 0.05 ? 1 : 0)
+                // Side wall joining the pocket to the back panel.
+                if abs(depth) > 1 {
+                    FolderSideWall(depth: depth, pocketTop: pocketTopY, inset: 18)
+                        .fill(LinearGradient(colors: [Self.wallLight, Self.wallDark],
+                                             startPoint: depth > 0 ? .leading : .trailing,
+                                             endPoint: depth > 0 ? .trailing : .leading))
+                        .frame(width: width, height: height)
+                        .offset(x: -depth / 2)
+                }
 
+                // Base thickness under the pocket.
+                pocketShape
+                    .fill(Self.baseBlue)
+                    .frame(width: width, height: pocketHeight)
+                    .offset(x: -depth / 2, y: pocketTopY + 5)
+
+                // Front pocket with a lit lip on top and shading that follows the turn.
                 pocketShape
                     .fill(LinearGradient(colors: [Self.pocketTop, Self.pocketBottom], startPoint: .top, endPoint: .bottom))
                     .overlay(
+                        pocketShape.fill(LinearGradient(
+                            colors: [.clear, .black.opacity(Double(abs(turn)) * 0.22)],
+                            startPoint: turn > 0 ? .leading : .trailing,
+                            endPoint: turn > 0 ? .trailing : .leading))
+                    )
+                    .overlay(
                         pocketShape
-                            .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
+                            .strokeBorder(LinearGradient(colors: [.white.opacity(0.7), .white.opacity(0.05)],
+                                                         startPoint: .top, endPoint: .bottom), lineWidth: 1.5)
                     )
                     .frame(width: width, height: pocketHeight)
-                    .offset(y: height - pocketHeight)
-                    .shadow(color: .black.opacity(0.25), radius: 6, y: -1)
+                    .offset(x: -depth / 2, y: pocketTopY)
+                    .shadow(color: .black.opacity(0.35), radius: 8, y: -2)
             }
-            .frame(width: width, height: height)
-            .shadow(color: .black.opacity(0.5), radius: 20, y: 10)
+            .frame(width: width, height: height + 5)
+            .shadow(color: .black.opacity(0.55), radius: 22, y: 12)
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
+    }
+}
+
+/// The side wall of a turned folder: a band from the pocket's edge to the back panel's edge on the
+/// side facing the viewer, slightly foreshortened at top and bottom.
+struct FolderSideWall: Shape {
+    /// Signed distance between the pocket and the back; positive means the wall is on the right.
+    let depth: CGFloat
+    let pocketTop: CGFloat
+    let inset: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let edge = depth > 0 ? rect.maxX - 1 : rect.minX + 1
+        let far = edge + depth
+        let squeeze = abs(depth) * 0.12
+        var path = Path()
+        path.move(to: CGPoint(x: edge, y: rect.minY + pocketTop + inset))
+        path.addLine(to: CGPoint(x: far, y: rect.minY + pocketTop + inset - squeeze))
+        path.addLine(to: CGPoint(x: far, y: rect.maxY - inset - squeeze))
+        path.addLine(to: CGPoint(x: edge, y: rect.maxY - inset))
+        path.closeSubpath()
+        return path
     }
 }
 
