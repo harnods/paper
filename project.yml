@@ -38,7 +38,11 @@ targets:
           SWIFT_OPTIMIZATION_LEVEL: -O
 
 schemes:
-  Paper:
+  Paper_macOS:
     build:
       targets:
-        Paper: all
+        Paper_macOS: all
+  Paper_iOS:
+    build:
+      targets:
+        Paper_iOS: all
