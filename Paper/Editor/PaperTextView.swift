@@ -141,6 +141,7 @@ final class PaperTextView: NSTextView {
             let marker: String
             switch line.info.kind {
             case .numbered(let n): marker = line.info.indent + "\(n + 1). "
+            case .todo: marker = line.info.indent + "- [ ] "
             case .quote: marker = "> "
             default: marker = line.info.indent + "- "
             }
@@ -157,7 +158,8 @@ final class PaperTextView: NSTextView {
             return true
 
         case #selector(insertTab(_:)):
-            guard [.bullet, .numbered(0)].contains(where: { sameKind($0, line.info.kind) }) else { return false }
+            guard [.bullet, .numbered(0), .todo(checked: false)].contains(where: { sameKind($0, line.info.kind) })
+            else { return false }
             replace(NSRange(location: line.range.location, length: 0), with: "    ",
                     caret: selection.location + 4)
             return true
@@ -177,7 +179,7 @@ final class PaperTextView: NSTextView {
 
     private func sameKind(_ a: LineKind, _ b: LineKind) -> Bool {
         switch (a, b) {
-        case (.numbered, .numbered): true
+        case (.numbered, .numbered), (.todo, .todo): true
         default: a == b
         }
     }
@@ -193,11 +195,26 @@ final class PaperTextView: NSTextView {
 
     override func insertText(_ string: Any, replacementRange: NSRange) {
         super.insertText(string, replacementRange: replacementRange)
+        if (string as? String) == " " { convertCheckboxShortcut() }
         guard (string as? String) == "/" else { return }
         let line = currentLine()
         if line.index > 0, nsString.substring(with: line.range) == "/" {
             let lineStart = line.range.location
             DispatchQueue.main.async { [weak self] in self?.showSlashMenu(lineStart: lineStart) }
+        }
+    }
+
+    /// Typing "[] " or "[ ] " at the start of a line turns it into a to-do.
+    private func convertCheckboxShortcut() {
+        let line = currentLine()
+        guard line.index > 0 else { return }
+        let text = nsString.substring(with: line.range)
+        let indent = String(text.prefix(while: { $0 == " " || $0 == "\t" }))
+        let rest = text.dropFirst(indent.count)
+        for shortcut in ["[] ", "[ ] "] where rest.hasPrefix(shortcut) {
+            let range = NSRange(location: line.range.location + indent.utf16.count, length: shortcut.utf16.count)
+            replace(range, with: "- [ ] ", caret: range.location + 6 + (selectedRange().location - NSMaxRange(range)))
+            return
         }
     }
 
@@ -210,6 +227,7 @@ final class PaperTextView: NSTextView {
         ("Heading 3", "### "),
         ("Bullet list", "- "),
         ("Numbered list", "1. "),
+        ("To-do list", "- [ ] "),
         ("Quote", "> "),
         ("Callout", "! "),
         ("Divider", "---"),
@@ -314,6 +332,7 @@ final class PaperTextView: NSTextView {
     @objc func setLineHeading3(_ sender: Any?) { setLinePrefix("### ") }
     @objc func setLineBullet(_ sender: Any?) { setLinePrefix("- ") }
     @objc func setLineNumbered(_ sender: Any?) { setLinePrefix("1. ") }
+    @objc func setLineTodo(_ sender: Any?) { setLinePrefix("- [ ] ") }
     @objc func setLineQuote(_ sender: Any?) { setLinePrefix("> ") }
     @objc func setLineCallout(_ sender: Any?) { setLinePrefix("! ") }
 
@@ -434,6 +453,29 @@ final class PaperTextView: NSTextView {
         return NSRect(x: line.minX - handleWidth - 10, y: line.minY, width: handleWidth, height: max(line.height, 18))
     }
 
+    /// The checkbox of a to-do line, in view coordinates.
+    private func checkboxRect(forLine index: Int, ranges: [NSRange]) -> NSRect? {
+        guard index > 0, index < ranges.count, index < lineKinds.count,
+              case .todo = lineKinds[index],
+              let line = geometry(forLineAt: ranges[index].location) else { return nil }
+        let info = MarkdownStyler.parse(nsString.substring(with: ranges[index]), isFirst: false)
+        let size = MarkdownStyler.checkboxSize
+        let font = MarkdownStyler.bodyFont
+        let textMid = line.firstLine.minY + MarkdownStyler.textTop(for: .body) + (font.ascender - font.descender) / 2
+        let x = line.content.minX + CGFloat(info.level) * MarkdownStyler.listIndent + 2
+        return NSRect(x: x, y: (textMid - size / 2).rounded(), width: size, height: size)
+    }
+
+    /// Flips "- [ ]" and "- [x]" on a to-do line.
+    private func toggleTodo(line index: Int, ranges: [NSRange]) {
+        let info = MarkdownStyler.parse(nsString.substring(with: ranges[index]), isFirst: false)
+        guard case .todo(let checked) = info.kind else { return }
+        let mark = NSRange(location: ranges[index].location + info.indent.utf16.count + 3, length: 1)
+        let caret = selectedRange()
+        replace(mark, with: checked ? " " : "x")
+        setSelectedRange(caret)
+    }
+
     private func plusRect(forLine index: Int, ranges: [NSRange]) -> NSRect? {
         guard let handle = handleRect(forLine: index, ranges: ranges) else { return nil }
         return NSRect(x: handle.minX - handleWidth - 2, y: handle.minY, width: handleWidth, height: handle.height)
@@ -481,8 +523,15 @@ final class PaperTextView: NSTextView {
         super.cursorUpdate(with: event)
     }
 
+    private func isOverCheckbox(_ event: NSEvent) -> Bool {
+        let point = convert(event.locationInWindow, from: nil)
+        let ranges = lineRanges()
+        guard let box = checkboxRect(forLine: lineIndex(atPoint: point), ranges: ranges) else { return false }
+        return box.insetBy(dx: -4, dy: -4).contains(point)
+    }
+
     override func mouseMoved(with event: NSEvent) {
-        if isOverToolbar(event) {
+        if isOverToolbar(event) || isOverCheckbox(event) {
             NSCursor.pointingHand.set()
             return
         }
@@ -511,6 +560,10 @@ final class PaperTextView: NSTextView {
 
         let ranges = lineRanges()
         let line = lineIndex(atPoint: point)
+        if let box = checkboxRect(forLine: line, ranges: ranges)?.insetBy(dx: -4, dy: -4), box.contains(point) {
+            toggleTodo(line: line, ranges: ranges)
+            return
+        }
         if let plus = plusRect(forLine: line, ranges: ranges)?.insetBy(dx: -2, dy: -2), plus.contains(point) {
             insertBlock(below: line, ranges: ranges)
             return
@@ -595,6 +648,27 @@ final class PaperTextView: NSTextView {
                     .font: MarkdownStyler.bodyFont,
                     .foregroundColor: MarkdownStyler.textColor,
                 ])
+            case .todo(let checked):
+                if let box = checkboxRect(forLine: index, ranges: ranges) {
+                    let path = NSBezierPath(roundedRect: box.insetBy(dx: 0.75, dy: 0.75), xRadius: 4, yRadius: 4)
+                    if checked {
+                        NSColor.black.withAlphaComponent(0.8).setFill()
+                        path.fill()
+                        let tick = NSBezierPath()
+                        tick.move(to: NSPoint(x: box.minX + box.width * 0.27, y: box.minY + box.height * 0.52))
+                        tick.line(to: NSPoint(x: box.minX + box.width * 0.44, y: box.minY + box.height * 0.69))
+                        tick.line(to: NSPoint(x: box.minX + box.width * 0.75, y: box.minY + box.height * 0.33))
+                        tick.lineWidth = 1.8
+                        tick.lineCapStyle = .round
+                        tick.lineJoinStyle = .round
+                        NSColor.white.setStroke()
+                        tick.stroke()
+                    } else {
+                        path.lineWidth = 1.5
+                        NSColor.black.withAlphaComponent(0.55).setStroke()
+                        path.stroke()
+                    }
+                }
             case .numbered:
                 // Numbered by position (1, 2, 3…), whatever digits were typed; nested lists count separately.
                 let info = MarkdownStyler.parse(nsString.substring(with: ranges[index]), isFirst: false)
@@ -743,6 +817,7 @@ final class PaperTextView: NSTextView {
         case .heading: return "Heading 3"
         case .bullet: return "Bullet list"
         case .numbered: return "Numbered list"
+        case .todo: return "To-do list"
         case .quote: return "Quote"
         case .callout: return "Callout"
         case .divider: return "Divider"
@@ -844,6 +919,7 @@ final class FormatToolbar: NSView {
         ("Heading 3", #selector(PaperTextView.setLineHeading3(_:))),
         ("Bullet list", #selector(PaperTextView.setLineBullet(_:))),
         ("Numbered list", #selector(PaperTextView.setLineNumbered(_:))),
+        ("To-do list", #selector(PaperTextView.setLineTodo(_:))),
         ("Quote", #selector(PaperTextView.setLineQuote(_:))),
         ("Callout", #selector(PaperTextView.setLineCallout(_:))),
     ]

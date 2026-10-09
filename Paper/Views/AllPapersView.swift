@@ -342,6 +342,7 @@ struct PaperThumbnail: View {
                 }
                 switch info.kind {
                 case .bullet: return "• " + body
+                case .todo(let checked): return (checked ? "\u{2611} " : "\u{2610} ") + body
                 case .numbered(let n): return "\(n). " + body
                 default: return body
                 }

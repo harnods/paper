@@ -91,6 +91,8 @@ struct PaperCommands: Commands {
                 .keyboardShortcut("8", modifiers: [.command, .shift])
             Button("Numbered list") { send(#selector(PaperTextView.setLineNumbered(_:))) }
                 .keyboardShortcut("7", modifiers: [.command, .shift])
+            Button("To-do list") { send(#selector(PaperTextView.setLineTodo(_:))) }
+                .keyboardShortcut("l", modifiers: [.command, .shift])
             Button("Quote") { send(#selector(PaperTextView.setLineQuote(_:))) }
                 .keyboardShortcut("9", modifiers: [.command, .shift])
             Button("Callout") { send(#selector(PaperTextView.setLineCallout(_:))) }

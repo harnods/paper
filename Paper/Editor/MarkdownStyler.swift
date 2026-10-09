@@ -5,6 +5,7 @@ enum LineKind: Equatable {
     case title
     case heading(Int)
     case bullet
+    case todo(checked: Bool)
     case numbered(Int)
     case quote
     case callout
@@ -13,7 +14,7 @@ enum LineKind: Equatable {
 
     var continuesOnReturn: Bool {
         switch self {
-        case .bullet, .numbered, .quote: true
+        case .bullet, .numbered, .quote, .todo: true
         default: false
         }
     }
@@ -24,6 +25,7 @@ enum LineKind: Equatable {
         case .heading(2): "Heading 2"
         case .heading: "Heading 3"
         case .bullet, .numbered: "List"
+        case .todo: "To-do"
         case .quote: "Quote"
         case .callout: "Callout"
         default: nil
@@ -73,6 +75,9 @@ enum MarkdownStyler {
     static let listItemSpacing: CGFloat = 4
     static let listIndent: CGFloat = 24
     static let numberIndent: CGFloat = 28
+    static let todoIndent: CGFloat = 28
+    static let checkboxSize: CGFloat = 16
+    static let secondaryTextColor = NSColor.black.withAlphaComponent(0.4)
     /// Space around the text on the page.
     static let pageInset: CGFloat = 56
 
@@ -115,6 +120,10 @@ enum MarkdownStyler {
             if trimmed == "---" || trimmed == "***" {
                 return LineInfo(kind: .divider, markerLength: (line as NSString).length, indent: "")
             }
+        }
+
+        for (box, checked) in [("- [ ] ", false), ("- [x] ", true), ("- [X] ", true)] where rest.hasPrefix(box) {
+            return LineInfo(kind: .todo(checked: checked), markerLength: indent.utf16.count + 6, indent: indent)
         }
 
         if rest.hasPrefix("- ") || rest.hasPrefix("* ") || rest.hasPrefix("+ ") {
@@ -174,7 +183,7 @@ enum MarkdownStyler {
         case .heading(let level):
             paragraph.paragraphSpacingBefore = level == 1 ? 20 : level == 2 ? 16 : 12
             paragraph.paragraphSpacing = 6
-        case .bullet, .numbered:
+        case .bullet, .numbered, .todo:
             paragraph.paragraphSpacing = listItemSpacing
         case .callout:
             paragraph.paragraphSpacingBefore = 6
@@ -187,6 +196,9 @@ enum MarkdownStyler {
         switch kind {
         case .bullet:
             paragraph.firstLineHeadIndent = level * listIndent + listIndent
+            paragraph.headIndent = paragraph.firstLineHeadIndent
+        case .todo:
+            paragraph.firstLineHeadIndent = level * listIndent + todoIndent
             paragraph.headIndent = paragraph.firstLineHeadIndent
         case .numbered:
             paragraph.firstLineHeadIndent = level * listIndent + numberIndent
@@ -270,6 +282,17 @@ enum MarkdownStyler {
 
         if info.hidesMarker {
             hide(markerRange, in: storage, isLinePrefix: true, result: &result)
+        }
+
+        // A ticked to-do is struck through and greyed out. Set before inline styling, which then
+        // hides any syntax inside the line.
+        if case .todo(checked: true) = info.kind, range.length > markerRange.length {
+            let content = NSRange(location: NSMaxRange(markerRange), length: range.length - markerRange.length)
+            storage.addAttributes([
+                .foregroundColor: secondaryTextColor,
+                .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                .strikethroughColor: secondaryTextColor,
+            ], range: content)
         }
 
         if info.kind != .divider, range.length > markerRange.length {
