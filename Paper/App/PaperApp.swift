@@ -7,14 +7,33 @@ struct PaperApp: App {
     @State private var store: PaperStore
 
     init() {
-        let container: ModelContainer
+        let container = PaperApp.makeContainer()
+        self.container = container
+        _store = State(initialValue: PaperStore(context: container.mainContext))
+    }
+
+    /// Opens the store; if an old store can't be migrated, moves it aside as a backup and starts fresh.
+    private static func makeContainer() -> ModelContainer {
+        let configuration = ModelConfiguration()
+        if let container = try? ModelContainer(for: Document.self, configurations: configuration) {
+            return container
+        }
+
+        let fileManager = FileManager.default
+        let storeURL = configuration.url
+        let stamp = Int(Date().timeIntervalSince1970)
+        for suffix in ["", "-shm", "-wal"] {
+            let file = URL(fileURLWithPath: storeURL.path + suffix)
+            guard fileManager.fileExists(atPath: file.path) else { continue }
+            let backup = URL(fileURLWithPath: storeURL.path + ".backup-\(stamp)" + suffix)
+            try? fileManager.moveItem(at: file, to: backup)
+        }
+
         do {
-            container = try ModelContainer(for: Document.self)
+            return try ModelContainer(for: Document.self, configurations: configuration)
         } catch {
             fatalError("Could not open the paper store: \(error)")
         }
-        self.container = container
-        _store = State(initialValue: PaperStore(context: container.mainContext))
     }
 
     var body: some Scene {

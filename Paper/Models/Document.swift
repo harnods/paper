@@ -3,12 +3,12 @@ import SwiftData
 
 @Model
 final class Document {
-    var title: String
-    var content: String
-    var blocksJSON: String
-    var createdAt: Date
-    var updatedAt: Date
-    var paperStyleRaw: String
+    var title: String = ""
+    var content: String = ""
+    var blocksJSON: String = ""
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var paperStyleRaw: String = PaperStyle.dotted.rawValue
 
     var paperStyle: PaperStyle {
         get { PaperStyle(rawValue: paperStyleRaw) ?? .dotted }
