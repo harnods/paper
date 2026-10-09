@@ -2,7 +2,9 @@ import SwiftUI
 
 struct PaperStylePicker: View {
     @Binding var style: PaperStyle
+    #if os(macOS)
     @State private var isHovering = false
+    #endif
 
     var body: some View {
         HStack(spacing: 2) {
@@ -20,13 +22,17 @@ struct PaperStylePicker: View {
                         )
                 }
                 .buttonStyle(.plain)
+                #if os(macOS)
                 .help(paperStyle.label)
+                #endif
             }
         }
         .padding(3)
         .background(Color.black.opacity(0.04), in: Capsule())
+        #if os(macOS)
         .opacity(isHovering ? 1 : 0.4)
         .animation(.easeInOut(duration: 0.2), value: isHovering)
         .onHover { isHovering = $0 }
+        #endif
     }
 }

@@ -28,7 +28,7 @@ struct PaperView: View {
                 } else {
                     Text(document.title.isEmpty ? " " : document.title)
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(.primary.opacity(0.8))
+                        .foregroundStyle(Color.primary.opacity(0.8))
                         .padding(paperPadding)
                     Spacer()
                 }

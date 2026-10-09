@@ -9,7 +9,7 @@ struct MarkdownEditorView: View {
         VStack(alignment: .leading, spacing: 16) {
             TextField("Untitled", text: $title, axis: .vertical)
                 .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(.primary.opacity(0.85))
+                .foregroundStyle(Color.primary.opacity(0.85))
                 .textFieldStyle(.plain)
                 .onChange(of: title) { onEdit() }
 
@@ -18,7 +18,7 @@ struct MarkdownEditorView: View {
             #else
             TextEditor(text: $content)
                 .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(.primary.opacity(0.75))
+                .foregroundStyle(Color.primary.opacity(0.75))
                 .scrollContentBackground(.hidden)
                 .onChange(of: content) { onEdit() }
             #endif
