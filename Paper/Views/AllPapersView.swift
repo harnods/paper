@@ -385,7 +385,7 @@ struct AllPapersView: View {
     private func cardFace(_ item: OverviewItem, tilt: Double) -> some View {
         switch item {
         case .folder(let folder):
-            FolderCard(isEmpty: store.itemCount(in: folder) == 0, tilt: tilt)
+            FolderCard(isEmpty: store.itemCount(in: folder) == 0)
         case .paper(let paper):
             PaperThumbnail(document: paper)
                 .shadow(color: .black.opacity(0.5), radius: 20, y: 10)
@@ -529,105 +529,47 @@ struct AllPapersView: View {
     }
 }
 
-/// A blue folder with volume, like a real open folder: the front pocket leans toward you (a true 3D
-/// tilt from its bottom edge), the front and back are joined by a rounded fold at the bottom, and the
-/// pocket's top edge has a rim. Folders with something in them show a few sheets inside.
+/// A blue folder. Empty folders are just the folder; folders with something in them show a sheet
+/// peeking out of the pocket.
 struct FolderCard: View {
     let isEmpty: Bool
-    /// The carousel's turn, in degrees; only used to shade the pocket as it turns.
-    var tilt: Double = 0
-
-    private static let backTop = Color(red: 0.25, green: 0.53, blue: 0.90)
-    private static let backBottom = Color(red: 0.17, green: 0.42, blue: 0.80)
-    private static let pocketTop = Color(red: 0.47, green: 0.76, blue: 1.0)
-    private static let pocketBottom = Color(red: 0.24, green: 0.54, blue: 0.92)
-    private static let fold = Color(red: 0.13, green: 0.34, blue: 0.68)
-    private static let rim = Color(red: 0.62, green: 0.84, blue: 1.0)
 
     var body: some View {
         GeometryReader { geometry in
-            let width = geometry.size.width * 0.86
-            let height = width * 0.82
-            let pocketHeight = height * 0.68
-            let pocketShape = UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 22,
-                                                     bottomTrailingRadius: 22, topTrailingRadius: 16,
-                                                     style: .continuous)
-            let turnShade = abs(sin(tilt * .pi / 180)) * 0.18
-
-            ZStack(alignment: .bottom) {
+            let width = geometry.size.width
+            let height = width * 0.78
+            let tabHeight = height * 0.12
+            ZStack(alignment: .topLeading) {
                 // Back panel with the tab.
-                FolderBackShape(tabWidth: width * 0.4, tabHeight: height * 0.12, radius: 16)
-                    .fill(LinearGradient(colors: [Self.backTop, Self.backBottom], startPoint: .top, endPoint: .bottom))
-                    .frame(width: width, height: height)
+                UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 16, bottomTrailingRadius: 16,
+                                       topTrailingRadius: 12, style: .continuous)
+                    .fill(Color(red: 0.24, green: 0.53, blue: 0.89))
+                    .frame(width: width * 0.42, height: tabHeight * 2)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(red: 0.24, green: 0.53, blue: 0.89))
+                    .frame(width: width, height: height - tabHeight)
+                    .offset(y: tabHeight)
 
-                // Papers inside, slightly fanned.
                 if !isEmpty {
-                    ForEach(0..<3, id: \.self) { i in
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(LinearGradient(colors: [.white, Color(white: 0.88)], startPoint: .top, endPoint: .bottom))
-                            .frame(width: width * 0.84, height: height * 0.74)
-                            .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
-                            .rotationEffect(.degrees(Double(i - 1) * 1.6))
-                            .offset(x: CGFloat(i - 1) * 5, y: -height * 0.05 - CGFloat(i) * 3)
-                    }
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(LinearGradient(colors: [.white, Color(white: 0.92)], startPoint: .top, endPoint: .bottom))
+                        .frame(width: width * 0.88, height: height * 0.4)
+                        .offset(x: width * 0.06, y: tabHeight * 1.6)
                 }
 
-                // The rounded fold joining front and back along the bottom.
-                Capsule(style: .continuous)
-                    .fill(LinearGradient(colors: [Self.fold, Self.fold.opacity(0.85)], startPoint: .top, endPoint: .bottom))
-                    .frame(width: width, height: 26)
-                    .offset(y: 6)
-
-                // Front pocket, opened toward you.
-                ZStack(alignment: .top) {
-                    pocketShape
-                        .fill(LinearGradient(colors: [Self.pocketTop, Self.pocketBottom], startPoint: .top, endPoint: .bottom))
-                    pocketShape
-                        .fill(Color.black.opacity(turnShade))
-                    // Rim along the top edge.
-                    UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 3,
-                                           bottomTrailingRadius: 3, topTrailingRadius: 16, style: .continuous)
-                        .fill(LinearGradient(colors: [Self.rim, Self.pocketTop], startPoint: .top, endPoint: .bottom))
-                        .frame(height: 7)
-                    pocketShape
-                        .strokeBorder(Color.white.opacity(0.3), lineWidth: 1)
-                }
-                .frame(width: width, height: pocketHeight)
-                .rotation3DEffect(.degrees(-24), axis: (x: 1, y: 0, z: 0), anchor: .bottom, perspective: 0.45)
-                .shadow(color: .black.opacity(0.3), radius: 10, y: -4)
+                // Front pocket.
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(red: 0.40, green: 0.70, blue: 0.97),
+                                                  Color(red: 0.24, green: 0.55, blue: 0.91)],
+                                         startPoint: .top, endPoint: .bottom))
+                    .frame(width: width, height: height * 0.72)
+                    .offset(y: height * 0.28)
+                    .shadow(color: .black.opacity(0.25), radius: 6, y: -1)
             }
-            .frame(width: width, height: height + 6)
-            .shadow(color: .black.opacity(0.5), radius: 22, y: 12)
+            .frame(width: width, height: height)
+            .shadow(color: .black.opacity(0.5), radius: 20, y: 10)
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
-    }
-}
-
-/// The back of a folder: one outline with the tab on the top left and a smooth slope down to the body.
-struct FolderBackShape: Shape {
-    let tabWidth: CGFloat
-    let tabHeight: CGFloat
-    let radius: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        let r = radius
-        let slope = tabHeight * 1.2
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY + r))
-        path.addQuadCurve(to: CGPoint(x: rect.minX + r, y: rect.minY), control: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.minX + tabWidth - slope * 0.5, y: rect.minY))
-        path.addCurve(to: CGPoint(x: rect.minX + tabWidth + slope * 0.5, y: rect.minY + tabHeight),
-                      control1: CGPoint(x: rect.minX + tabWidth, y: rect.minY),
-                      control2: CGPoint(x: rect.minX + tabWidth, y: rect.minY + tabHeight))
-        path.addLine(to: CGPoint(x: rect.maxX - r, y: rect.minY + tabHeight))
-        path.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY + tabHeight + r),
-                          control: CGPoint(x: rect.maxX, y: rect.minY + tabHeight))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
-        path.addQuadCurve(to: CGPoint(x: rect.maxX - r, y: rect.maxY), control: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
-        path.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.maxY - r), control: CGPoint(x: rect.minX, y: rect.maxY))
-        path.closeSubpath()
-        return path
     }
 }
 
