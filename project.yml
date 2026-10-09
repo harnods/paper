@@ -6,6 +6,11 @@ options:
     macOS: "14.0"
   xcodeVersion: "16.0"
   minimumXcodeGenVersion: "2.38.0"
+  # Icon Composer icons (.icon) are packages: add them whole, as resources.
+  fileTypes:
+    icon:
+      file: true
+      buildPhase: resources
 
 settings:
   base:
