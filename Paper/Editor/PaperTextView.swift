@@ -225,19 +225,51 @@ final class PaperTextView: NSTextView {
     @objc func toggleStrikeMarkdown(_ sender: Any?) { toggleWrap("~~") }
     @objc func toggleHighlightMarkdown(_ sender: Any?) { toggleWrap("==") }
 
+    private func isHidden(_ index: Int) -> Bool {
+        guard index >= 0, index < nsString.length else { return false }
+        return textStorage?.attribute(.paperHidden, at: index, effectiveRange: nil) != nil
+    }
+
+    /// Whether `run` ends (or starts) with `marker`, without mistaking `**` for `*`.
+    private func syntaxRun(_ text: String, hasMarker marker: String, atEnd: Bool) -> Bool {
+        guard marker == "*" else { return atEnd ? text.hasSuffix(marker) : text.hasPrefix(marker) }
+        let stars = atEnd ? text.reversed().prefix(while: { $0 == "*" }).count : text.prefix(while: { $0 == "*" }).count
+        return stars == 1 || stars == 3
+    }
+
+    /// Adds or removes `marker` around the selection. Hidden syntax at the selection's edges is
+    /// ignored, and existing markers next to it are removed instead of stacked.
     private func toggleWrap(_ marker: String) {
-        let sel = selectedRange()
-        let m = (marker as NSString).length
         let ns = nsString
-        if sel.location >= m, NSMaxRange(sel) + m <= ns.length,
-           ns.substring(with: NSRange(location: sel.location - m, length: m)) == marker,
-           ns.substring(with: NSRange(location: NSMaxRange(sel), length: m)) == marker {
+        let m = (marker as NSString).length
+        var sel = selectedRange()
+        while sel.length > 0, isHidden(sel.location) { sel.location += 1; sel.length -= 1 }
+        while sel.length > 0, isHidden(NSMaxRange(sel) - 1) { sel.length -= 1 }
+
+        var left = sel.location
+        while isHidden(left - 1) { left -= 1 }
+        var right = NSMaxRange(sel)
+        while isHidden(right) { right += 1 }
+        let leftRun = ns.substring(with: NSRange(location: left, length: sel.location - left))
+        let rightRun = ns.substring(with: NSRange(location: NSMaxRange(sel), length: right - NSMaxRange(sel)))
+        let inner = ns.substring(with: sel)
+
+        if sel.length > 0, syntaxRun(leftRun, hasMarker: marker, atEnd: true), syntaxRun(rightRun, hasMarker: marker, atEnd: false) {
             let outer = NSRange(location: sel.location - m, length: sel.length + 2 * m)
-            replace(outer, with: ns.substring(with: sel))
+            replace(outer, with: inner)
             setSelectedRange(NSRange(location: sel.location - m, length: sel.length))
             return
         }
-        let inner = ns.substring(with: sel)
+        if sel.length > 0, leftRun != marker, syntaxRun(leftRun, hasMarker: marker, atEnd: false),
+           syntaxRun(rightRun, hasMarker: marker, atEnd: true) {
+            let span = NSRange(location: left, length: right - left)
+            let newLeft = String(leftRun.dropFirst(marker.count))
+            let newRight = String(rightRun.dropLast(marker.count))
+            replace(span, with: newLeft + inner + newRight)
+            setSelectedRange(NSRange(location: left + (newLeft as NSString).length, length: sel.length))
+            return
+        }
+
         replace(sel, with: marker + inner + marker)
         setSelectedRange(NSRange(location: sel.location + m, length: sel.length))
     }
