@@ -569,6 +569,17 @@ final class PaperTextView: NSTextView {
         }
     }
 
+    /// The line box includes extra line spacing below the text; keep the caret to the font's height.
+    override func drawInsertionPoint(in rect: NSRect, color: NSColor, turnedOn flag: Bool) {
+        var rect = rect
+        let font = MarkdownStyler.font(for: currentLine().info.kind)
+        let height = ceil(font.ascender - font.descender)
+        if rect.height > height {
+            rect.size.height = height
+        }
+        super.drawInsertionPoint(in: rect, color: color, turnedOn: flag)
+    }
+
     override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
         var ranges = ranges
         if !stillSelecting, ranges.count == 1, let range = ranges.first?.rangeValue, range.length == 0 {
