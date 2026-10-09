@@ -196,6 +196,7 @@ struct MarkdownEditor: NSViewRepresentable {
         let chip = ScrollToBottomChip()
         scrollView.addSubview(chip)
         context.coordinator.attachChip(chip, to: scrollView, textView: textView)
+        context.coordinator.observeTermination()
 
         textView.string = document.markdown
         textView.restyle()
@@ -206,6 +207,10 @@ struct MarkdownEditor: NSViewRepresentable {
             textView.setSelectedRange(NSRange(location: (textView.string as NSString).length, length: 0))
         }
         return scrollView
+    }
+
+    static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+        coordinator.flushSave()
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
@@ -233,6 +238,14 @@ struct MarkdownEditor: NSViewRepresentable {
             for observer in observers {
                 NotificationCenter.default.removeObserver(observer)
             }
+        }
+
+        func observeTermination() {
+            observers.append(NotificationCenter.default.addObserver(
+                forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.flushSave() }
+            })
         }
 
         func attachChip(_ chip: ScrollToBottomChip, to scrollView: NSScrollView, textView: NSTextView) {
@@ -283,10 +296,30 @@ struct MarkdownEditor: NSViewRepresentable {
             scrollView.reflectScrolledClipView(clip)
         }
 
+        private var saveTask: Task<Void, Never>?
+        private var unsavedText: String?
+
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? PaperTextView else { return }
             textView.restyle()
-            document.markdown = textView.string
+            scheduleSave(textView.string)
+        }
+
+        /// Saving on every keystroke made typing sluggish; save once typing pauses instead.
+        private func scheduleSave(_ text: String) {
+            unsavedText = text
+            saveTask?.cancel()
+            saveTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                self?.flushSave()
+            }
+        }
+
+        func flushSave() {
+            guard let text = unsavedText else { return }
+            unsavedText = nil
+            document.markdown = text
         }
 
         func paperMenuItems() -> [NSMenuItem] {

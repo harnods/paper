@@ -138,23 +138,38 @@ enum MarkdownStyler {
         return LineInfo(kind: .body, markerLength: 0, indent: "")
     }
 
-    /// Restyles the whole storage; returns each line's kind and the hidden syntax ranges.
+    /// Returns each line's kind and the hidden syntax ranges for the whole storage, but only rewrites
+    /// attributes for paragraphs touching `dirty` (all of them when nil). Rewriting attributes forces
+    /// relayout, so limiting it to the edited paragraphs keeps typing fast in long papers.
     @discardableResult
-    static func style(_ storage: NSTextStorage) -> StyleResult {
+    static func style(_ storage: NSTextStorage, dirty: NSRange? = nil) -> StyleResult {
         let ns = storage.string as NSString
         let full = NSRange(location: 0, length: ns.length)
         var result = StyleResult(kinds: [], hidden: [])
+        var dirtyRange = full
+        if let dirty {
+            let start = min(dirty.location, ns.length)
+            dirtyRange = ns.paragraphRange(for: NSRange(location: start, length: min(dirty.length, ns.length - start)))
+        }
 
         storage.beginEditing()
-        storage.setAttributes(attributes(for: .body), range: full)
+        if dirty == nil {
+            storage.setAttributes(attributes(for: .body), range: full)
+        }
 
         var lineIndex = 0
         ns.enumerateSubstrings(in: full, options: [.byParagraphs, .substringNotRequired]) { _, range, enclosing, _ in
             let line = ns.substring(with: range)
             let info = parse(line, isFirst: lineIndex == 0)
             result.kinds.append(info.kind)
-            styleLine(storage, range: range, enclosing: enclosing, line: line, info: info, result: &result)
-            if lineIndex == 1 {
+            // The title and the line under it depend on their position, so they are always restyled.
+            let apply = dirty == nil || lineIndex <= 1 || NSIntersectionRange(enclosing, dirtyRange).length > 0
+                || NSLocationInRange(enclosing.location, dirtyRange)
+            if apply, dirty != nil {
+                storage.setAttributes(attributes(for: .body), range: enclosing)
+            }
+            styleLine(storage, range: range, enclosing: enclosing, line: line, info: info, apply: apply, result: &result)
+            if lineIndex == 1, apply {
                 addSpaceBelowTitle(storage, enclosing: enclosing)
             }
             lineIndex += 1
@@ -260,33 +275,37 @@ enum MarkdownStyler {
         storage.addAttribute(.paragraphStyle, value: style, range: enclosing)
     }
 
-    private static func hide(_ range: NSRange, in storage: NSTextStorage, isLinePrefix: Bool, result: inout StyleResult) {
+    private static func hide(_ range: NSRange, in storage: NSTextStorage, isLinePrefix: Bool, apply: Bool,
+                             result: inout StyleResult) {
         guard range.length > 0 else { return }
+        result.hidden.append(HiddenRange(range: range, isLinePrefix: isLinePrefix))
+        guard apply else { return }
         storage.addAttributes([
             .paperHidden: true,
             .font: hiddenFont,
             .foregroundColor: NSColor.clear,
         ], range: range)
-        result.hidden.append(HiddenRange(range: range, isLinePrefix: isLinePrefix))
     }
 
     private static func styleLine(_ storage: NSTextStorage, range: NSRange, enclosing: NSRange, line: String,
-                                  info: LineInfo, result: inout StyleResult) {
+                                  info: LineInfo, apply: Bool, result: inout StyleResult) {
         let font = font(for: info.kind)
         let markerRange = NSRange(location: range.location, length: min(info.markerLength, range.length))
-        let markerWidth = (storage.attributedSubstring(from: markerRange).string as NSString)
-            .size(withAttributes: [.font: font]).width
 
-        // Paragraph attributes span the newline so spacing applies even to empty lines.
-        storage.addAttributes(attributes(for: info.kind, info: info, markerWidth: markerWidth), range: enclosing)
+        if apply {
+            let markerWidth = (storage.attributedSubstring(from: markerRange).string as NSString)
+                .size(withAttributes: [.font: font]).width
+            // Paragraph attributes span the newline so spacing applies even to empty lines.
+            storage.addAttributes(attributes(for: info.kind, info: info, markerWidth: markerWidth), range: enclosing)
+        }
 
         if info.hidesMarker {
-            hide(markerRange, in: storage, isLinePrefix: true, result: &result)
+            hide(markerRange, in: storage, isLinePrefix: true, apply: apply, result: &result)
         }
 
         // A ticked to-do is struck through and greyed out. Set before inline styling, which then
         // hides any syntax inside the line.
-        if case .todo(checked: true) = info.kind, range.length > markerRange.length {
+        if apply, case .todo(checked: true) = info.kind, range.length > markerRange.length {
             let content = NSRange(location: NSMaxRange(markerRange), length: range.length - markerRange.length)
             storage.addAttributes([
                 .foregroundColor: secondaryTextColor,
@@ -296,7 +315,7 @@ enum MarkdownStyler {
         }
 
         if info.kind != .divider, range.length > markerRange.length {
-            styleInline(storage, range: range, baseFont: font, result: &result)
+            styleInline(storage, range: range, baseFont: font, apply: apply, result: &result)
         }
     }
 
@@ -306,17 +325,19 @@ enum MarkdownStyler {
     private static let strike = try! NSRegularExpression(pattern: "~~(?=\\S)(.+?)(?<=\\S)~~")
     private static let highlight = try! NSRegularExpression(pattern: "==(?=\\S)(.+?)(?<=\\S)==")
 
-    private static func styleInline(_ storage: NSTextStorage, range: NSRange, baseFont: NSFont, result: inout StyleResult) {
+    private static func styleInline(_ storage: NSTextStorage, range: NSRange, baseFont: NSFont, apply shouldApply: Bool,
+                                    result: inout StyleResult) {
         let text = storage.string
         let manager = NSFontManager.shared
 
         func apply(_ regex: NSRegularExpression, markerLength: Int, _ body: (NSRange) -> Void) {
             for match in regex.matches(in: text, options: [], range: range) {
                 let whole = match.range
-                body(match.range(at: 1))
-                hide(NSRange(location: whole.location, length: markerLength), in: storage, isLinePrefix: false, result: &result)
+                if shouldApply { body(match.range(at: 1)) }
+                hide(NSRange(location: whole.location, length: markerLength), in: storage, isLinePrefix: false,
+                     apply: shouldApply, result: &result)
                 hide(NSRange(location: NSMaxRange(whole) - markerLength, length: markerLength), in: storage,
-                     isLinePrefix: false, result: &result)
+                     isLinePrefix: false, apply: shouldApply, result: &result)
             }
         }
 

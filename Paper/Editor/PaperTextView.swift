@@ -20,6 +20,17 @@ final class PaperTextView: NSTextView {
 
     /// Content range of every line, excluding the newline.
     func lineRanges() -> [NSRange] {
+        if let cachedLineRanges { return cachedLineRanges }
+        let ranges = computeLineRanges()
+        cachedLineRanges = ranges
+        return ranges
+    }
+
+    private var cachedLineRanges: [NSRange]?
+    /// Edited span since the last restyle, in post-edit coordinates; nil means restyle everything.
+    private var pendingDirty: NSRange?
+
+    private func computeLineRanges() -> [NSRange] {
         var ranges: [NSRange] = []
         var start = 0
         let ns = nsString
@@ -41,12 +52,11 @@ final class PaperTextView: NSTextView {
 
     func restyle() {
         guard let storage = textStorage else { return }
-        let result = MarkdownStyler.style(storage)
+        cachedLineRanges = nil
+        let result = MarkdownStyler.style(storage, dirty: pendingDirty)
+        pendingDirty = nil
         lineKinds = result.kinds
         hiddenRanges = result.hidden
-        let full = NSRange(location: 0, length: storage.length)
-        layoutManager?.invalidateGlyphs(forCharacterRange: full, changeInLength: 0, actualCharacterRange: nil)
-        layoutManager?.invalidateLayout(forCharacterRange: full, actualCharacterRange: nil)
         updateTypingAttributes()
         needsDisplay = true
     }
@@ -81,7 +91,14 @@ final class PaperTextView: NSTextView {
         // Hidden ranges are stale until the edit is restyled; don't snap against them meanwhile.
         hiddenRanges = []
         formatToolbar.isHidden = true
-        return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+        cachedLineRanges = nil
+        let allowed = super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+        if allowed {
+            // Remember what changed so restyling only touches those paragraphs.
+            let edited = NSRange(location: affectedCharRange.location, length: (replacementString as NSString?)?.length ?? 0)
+            pendingDirty = pendingDirty.map { NSUnionRange($0, edited) } ?? edited
+        }
+        return allowed
     }
 
     /// Keeps the caret out of hidden syntax so arrow keys never seem to stick.
@@ -614,14 +631,38 @@ final class PaperTextView: NSTextView {
 
     // MARK: Drawing
 
+    /// Lines that intersect `rect`, so drawing skips everything off screen.
+    private func visibleLines(in rect: NSRect, ranges: [NSRange]) -> ClosedRange<Int> {
+        guard let layoutManager, let textContainer, !ranges.isEmpty else { return 0...max(ranges.count - 1, 0) }
+        let containerRect = rect.offsetBy(dx: -textContainerOrigin.x, dy: -textContainerOrigin.y)
+        let glyphs = layoutManager.glyphRange(forBoundingRect: containerRect, in: textContainer)
+        let chars = layoutManager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
+        let first = lineIndex(at: chars.location, in: ranges)
+        let last = lineIndex(at: NSMaxRange(chars), in: ranges)
+        return first...max(first, last)
+    }
+
     override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
         let ranges = lineRanges()
 
+        let visible = visibleLines(in: rect, ranges: ranges)
         var listCounts: [Int] = []
         for (index, kind) in lineKinds.enumerated() where index < ranges.count {
-            if case .numbered = kind {} else { listCounts.removeAll() }
-            guard kind != .body, kind != .title, let line = geometry(forLineAt: ranges[index].location) else { continue }
+            // Numbering counts every line above, visible or not.
+            var number = 0
+            var numberLevel = 0
+            if case .numbered = kind {
+                numberLevel = MarkdownStyler.parse(nsString.substring(with: ranges[index]), isFirst: false).level
+                if listCounts.count > numberLevel + 1 { listCounts.removeLast(listCounts.count - numberLevel - 1) }
+                while listCounts.count < numberLevel + 1 { listCounts.append(0) }
+                listCounts[numberLevel] += 1
+                number = listCounts[numberLevel]
+            } else {
+                listCounts.removeAll()
+            }
+            guard visible.contains(index), kind != .body, kind != .title,
+                  let line = geometry(forLineAt: ranges[index].location) else { continue }
             let content = line.content
             switch kind {
             case .divider:
@@ -671,12 +712,8 @@ final class PaperTextView: NSTextView {
                 }
             case .numbered:
                 // Numbered by position (1, 2, 3…), whatever digits were typed; nested lists count separately.
-                let info = MarkdownStyler.parse(nsString.substring(with: ranges[index]), isFirst: false)
-                let level = info.level
-                if listCounts.count > level + 1 { listCounts.removeLast(listCounts.count - level - 1) }
-                while listCounts.count < level + 1 { listCounts.append(0) }
-                listCounts[level] += 1
-                let label = "\(listCounts[level])." as NSString
+                let level = numberLevel
+                let label = "\(number)." as NSString
                 let attributes: [NSAttributedString.Key: Any] = [
                     .font: MarkdownStyler.bodyFont,
                     .foregroundColor: MarkdownStyler.textColor,
@@ -690,14 +727,15 @@ final class PaperTextView: NSTextView {
             }
         }
 
-        drawPlaceholders(ranges: ranges)
+        drawPlaceholders(ranges: ranges, visible: visible)
     }
 
-    private func drawPlaceholders(ranges: [NSRange]) {
+    private func drawPlaceholders(ranges: [NSRange], visible: ClosedRange<Int>) {
         let isFocused = window?.firstResponder === self && selectedRange().length == 0
         let caretLine = lineIndex(at: selectedRange().location, in: ranges)
 
-        for (index, range) in ranges.enumerated() {
+        for index in visible where index < ranges.count {
+            let range = ranges[index]
             let info = MarkdownStyler.parse(nsString.substring(with: range), isFirst: index == 0)
             guard range.length == info.markerLength else { continue }
 
