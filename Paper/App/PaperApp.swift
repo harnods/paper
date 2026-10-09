@@ -13,7 +13,8 @@ struct PaperApp: App {
                 .background(TransparentWindow())
         }
         .modelContainer(container)
-        .windowStyle(.hiddenTitleBar)
+        // No title bar at all, so the window is exactly the paper (a hidden title bar still adds a strip).
+        .windowStyle(.plain)
         .windowResizability(.contentSize)
         .defaultPosition(.center)
         .commands { PaperCommands(store: store) }

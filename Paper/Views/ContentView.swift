@@ -57,8 +57,6 @@ struct ContentView: View {
             }
         }
         .frame(width: PaperLayout.windowSize.width, height: PaperLayout.windowSize.height)
-        // Fill the (hidden) title bar area too, so the window is exactly the paper with no strip on top.
-        .ignoresSafeArea()
         .background(PaperWindowRegistrar(paperID: paperID))
         .preferredColorScheme(.light)
         .onAppear {
