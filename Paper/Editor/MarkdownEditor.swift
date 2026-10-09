@@ -255,10 +255,13 @@ struct MarkdownEditor: NSViewRepresentable {
         /// Shows the chip when more than about a screen's third of text is below the visible area.
         private func updateChip() {
             guard let chip, let scrollView, let textView else { return }
-            let bounds = scrollView.bounds
-            let inset: CGFloat = 20
-            let y = scrollView.isFlipped ? bounds.height - ScrollToBottomChip.size - inset : inset
-            chip.frame.origin = NSPoint(x: (bounds.width - ScrollToBottomChip.size) / 2, y: y)
+            // Measure in the clip view (always top-down) and convert, so the chip lands at the bottom
+            // whichever way the scroll view counts its coordinates.
+            let clipView = scrollView.contentView
+            let size = ScrollToBottomChip.size
+            let visible = clipView.bounds
+            let rectInClip = NSRect(x: visible.midX - size / 2, y: visible.maxY - size - 20, width: size, height: size)
+            chip.frame = scrollView.convert(rectInClip, from: clipView)
             let clip = scrollView.contentView.bounds
             let remaining = textView.frame.height - clip.maxY
             chip.setVisible(remaining > max(160, clip.height / 3))
