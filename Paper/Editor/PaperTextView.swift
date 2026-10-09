@@ -1,7 +1,7 @@
 #if os(macOS)
 import AppKit
 
-final class PaperTextView: NSTextView, NSLayoutManagerDelegate {
+final class PaperTextView: NSTextView {
     private(set) var lineKinds: [LineKind] = []
     private var hiddenRanges: [HiddenRange] = []
     private var hoveredLine: Int?
@@ -49,31 +49,6 @@ final class PaperTextView: NSTextView, NSLayoutManagerDelegate {
     }
 
     // MARK: Hidden syntax
-
-    /// Markdown syntax marked hidden gets null glyphs, so it takes no space and isn't drawn.
-    func layoutManager(_ layoutManager: NSLayoutManager,
-                       shouldGenerateGlyphs glyphs: UnsafePointer<CGGlyph>,
-                       properties props: UnsafePointer<NSLayoutManager.GlyphProperty>,
-                       characterIndexes charIndexes: UnsafePointer<Int>,
-                       font aFont: NSFont,
-                       forGlyphRange glyphRange: NSRange) -> Int {
-        guard let storage = layoutManager.textStorage else { return 0 }
-        var properties = Array(UnsafeBufferPointer(start: props, count: glyphRange.length))
-        var changed = false
-        for i in 0..<glyphRange.length {
-            let index = charIndexes[i]
-            guard index < storage.length,
-                  storage.attribute(.paperHidden, at: index, effectiveRange: nil) != nil else { continue }
-            properties[i] = .null
-            changed = true
-        }
-        guard changed else { return 0 }
-        properties.withUnsafeBufferPointer { buffer in
-            layoutManager.setGlyphs(glyphs, properties: buffer.baseAddress!, characterIndexes: charIndexes,
-                                    font: aFont, forGlyphRange: glyphRange)
-        }
-        return glyphRange.length
-    }
 
     override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
         // Hidden ranges are stale until the edit is restyled; don't snap against them meanwhile.

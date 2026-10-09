@@ -165,7 +165,6 @@ struct MarkdownEditor: NSViewRepresentable {
         textView.isIncrementalSearchingEnabled = true
         textView.selectedTextAttributes = [.backgroundColor: NSColor.selectedTextBackgroundColor]
         textView.delegate = context.coordinator
-        layoutManager.delegate = textView
         textView.paperMenuItems = { [weak coordinator = context.coordinator] in
             coordinator?.paperMenuItems() ?? []
         }
