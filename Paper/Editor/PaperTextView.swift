@@ -726,6 +726,7 @@ final class PaperTextView: NSTextView {
 /// Borderless toolbar button with a pointer cursor and a soft background on hover.
 final class ToolbarButton: NSButton {
     private var hoverArea: NSTrackingArea?
+    private let hoverLayer = CALayer()
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -742,10 +743,20 @@ final class ToolbarButton: NSButton {
     override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
 
+    override func layout() {
+        super.layout()
+        hoverLayer.frame = bounds.insetBy(dx: 2, dy: 2)
+    }
+
+    /// Soft background inset 2pt inside the button, so neighbouring hovers never touch.
     private func setHovered(_ hovered: Bool) {
         wantsLayer = true
-        layer?.cornerRadius = 6
-        layer?.backgroundColor = hovered ? NSColor.black.withAlphaComponent(0.06).cgColor : NSColor.clear.cgColor
+        if hoverLayer.superlayer == nil, let layer {
+            hoverLayer.cornerRadius = 6
+            hoverLayer.frame = bounds.insetBy(dx: 2, dy: 2)
+            layer.insertSublayer(hoverLayer, at: 0)
+        }
+        hoverLayer.backgroundColor = hovered ? NSColor.black.withAlphaComponent(0.06).cgColor : NSColor.clear.cgColor
     }
 }
 
@@ -796,7 +807,7 @@ final class FormatToolbar: NSView {
 
         stack.orientation = .horizontal
         stack.spacing = 4
-        stack.edgeInsets = NSEdgeInsets(top: 4, left: 6, bottom: 4, right: 6)
+        stack.edgeInsets = NSEdgeInsets(top: 6, left: 8, bottom: 6, right: 8)
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(turnIntoButton)
         stack.addArrangedSubview(separator())
