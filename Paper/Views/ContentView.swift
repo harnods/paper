@@ -40,8 +40,8 @@ struct ContentView: View {
                 RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous)
                     .fill(Color.white)
                     .frame(width: PaperLayout.paperSize.width, height: PaperLayout.paperSize.height)
-                    .shadow(color: .black.opacity(0.18), radius: 18, x: 0, y: 8)
-                    .shadow(color: .black.opacity(0.06), radius: 2, x: 0, y: 1)
+                    .shadow(color: .black.opacity(0.08), radius: 16, x: 0, y: 6)
+                    .shadow(color: .black.opacity(0.04), radius: 1, x: 0, y: 1)
 
                 MarkdownEditor(document: doc, style: doc.paperStyle, store: store, actions: actions(for: doc))
                     .id(doc.persistentModelID)

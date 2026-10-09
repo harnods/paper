@@ -792,6 +792,12 @@ final class ToolbarButton: NSButton {
         hoverArea = area
     }
 
+    /// Clicks on the label or chevron inside the button count as clicks on the button.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let superview else { return super.hitTest(point) }
+        return bounds.contains(convert(point, from: superview)) ? self : nil
+    }
+
     override func mouseEntered(with event: NSEvent) { setHovered(isEnabled) }
     override func mouseExited(with event: NSEvent) { setHovered(false) }
     override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
@@ -817,7 +823,8 @@ final class ToolbarButton: NSButton {
 /// Floating bar shown above selected text: turn the block into another type, or style the text.
 final class FormatToolbar: NSView {
     private weak var textView: PaperTextView?
-    private let turnIntoButton = ToolbarButton(title: "Text", target: nil, action: nil)
+    private let turnIntoButton = ToolbarButton(title: "", target: nil, action: nil)
+    private let turnIntoLabel = NSTextField(labelWithString: "Text")
     private let stack = NSStackView()
 
     private static let blockTypes: [(String, Selector)] = [
@@ -846,20 +853,31 @@ final class FormatToolbar: NSView {
         layer?.shadowOffset = CGSize(width: 0, height: -2)
         layer?.masksToBounds = false
 
+        // Label on the left, chevron on the right, like a pop-up button.
+        turnIntoButton.title = ""
         turnIntoButton.isBordered = false
-        turnIntoButton.font = .systemFont(ofSize: 14, weight: .medium)
-        turnIntoButton.contentTintColor = NSColor.black.withAlphaComponent(0.8)
-        turnIntoButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
-        turnIntoButton.imagePosition = .imageTrailing
-        // Keep the chevron beside the label; the pair is centred, leaving room at both edges.
-        turnIntoButton.imageHugsTitle = true
         turnIntoButton.refusesFirstResponder = true
         turnIntoButton.target = self
         turnIntoButton.action = #selector(showTurnIntoMenu)
         turnIntoButton.toolTip = "Turn into"
-        turnIntoButton.heightAnchor.constraint(equalToConstant: 32).isActive = true
-        turnIntoButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 112).isActive = true
+        turnIntoLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        turnIntoLabel.textColor = NSColor.black.withAlphaComponent(0.8)
+        turnIntoLabel.translatesAutoresizingMaskIntoConstraints = false
+        let chevron = NSImageView(image: NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold)) ?? NSImage())
+        chevron.contentTintColor = NSColor.black.withAlphaComponent(0.6)
+        chevron.translatesAutoresizingMaskIntoConstraints = false
+        turnIntoButton.addSubview(turnIntoLabel)
+        turnIntoButton.addSubview(chevron)
+        NSLayoutConstraint.activate([
+            turnIntoButton.heightAnchor.constraint(equalToConstant: 32),
+            turnIntoButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 128),
+            turnIntoLabel.leadingAnchor.constraint(equalTo: turnIntoButton.leadingAnchor, constant: 10),
+            turnIntoLabel.centerYAnchor.constraint(equalTo: turnIntoButton.centerYAnchor),
+            chevron.trailingAnchor.constraint(equalTo: turnIntoButton.trailingAnchor, constant: -10),
+            chevron.centerYAnchor.constraint(equalTo: turnIntoButton.centerYAnchor),
+            chevron.leadingAnchor.constraint(greaterThanOrEqualTo: turnIntoLabel.trailingAnchor, constant: 8),
+        ])
 
         stack.orientation = .horizontal
         stack.spacing = 4
@@ -890,7 +908,7 @@ final class FormatToolbar: NSView {
 
     func refresh() {
         guard let textView else { return }
-        turnIntoButton.title = textView.currentBlockLabel()
+        turnIntoLabel.stringValue = textView.currentBlockLabel()
         turnIntoButton.isEnabled = !textView.caretIsOnTitle
     }
 
