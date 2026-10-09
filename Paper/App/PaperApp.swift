@@ -15,6 +15,7 @@ struct PaperApp: App {
         .modelContainer(container)
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
+        .defaultPosition(.center)
         .commands { PaperCommands(store: store) }
 
         Window("All papers", id: PaperWindowID.allPapers) {
@@ -25,7 +26,7 @@ struct PaperApp: App {
         .windowResizability(.contentSize)
         .defaultPosition(.top)
 
-        MenuBarExtra("Paper", systemImage: "doc.text") {
+        MenuBarExtra("Paper", image: "MenuBarIcon") {
             PaperMenuBarMenu(store: store)
         }
         #else
@@ -129,6 +130,8 @@ struct TransparentWindow: NSViewRepresentable {
             for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
                 window.standardWindowButton(button)?.isHidden = true
             }
+            // Every paper opens in the middle of the screen, new or reopened.
+            window.center()
         }
         return view
     }
