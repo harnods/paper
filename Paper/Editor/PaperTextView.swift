@@ -4,6 +4,7 @@ import AppKit
 final class PaperTextView: NSTextView {
     private(set) var lineKinds: [LineKind] = []
     private var hiddenRanges: [HiddenRange] = []
+    private lazy var formatToolbar = FormatToolbar(textView: self)
     private var hoveredLine: Int?
     private var dropIndicatorY: CGFloat?
     private var isDraggingBlock = false
@@ -53,6 +54,7 @@ final class PaperTextView: NSTextView {
     override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
         // Hidden ranges are stale until the edit is restyled; don't snap against them meanwhile.
         hiddenRanges = []
+        formatToolbar.isHidden = true
         return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
     }
 
@@ -590,6 +592,176 @@ final class PaperTextView: NSTextView {
         }
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
         needsDisplay = true
+        if stillSelecting {
+            formatToolbar.isHidden = true
+        } else {
+            DispatchQueue.main.async { [weak self] in self?.updateFormatToolbar() }
+        }
+    }
+
+    override func resignFirstResponder() -> Bool {
+        formatToolbar.isHidden = true
+        return super.resignFirstResponder()
+    }
+
+    // MARK: Format toolbar
+
+    /// Label for the block type at the caret, shown on the toolbar's "Turn into" button.
+    func currentBlockLabel() -> String {
+        let line = currentLine()
+        switch line.info.kind {
+        case .title: return "Title"
+        case .heading(1): return "Heading 1"
+        case .heading(2): return "Heading 2"
+        case .heading: return "Heading 3"
+        case .bullet: return "Bullet list"
+        case .numbered: return "Numbered list"
+        case .quote: return "Quote"
+        case .callout: return "Callout"
+        case .divider: return "Divider"
+        case .body: return "Text"
+        }
+    }
+
+    var caretIsOnTitle: Bool { currentLine().index == 0 }
+
+    private func updateFormatToolbar() {
+        let selection = selectedRange()
+        guard selection.length > 0, window?.firstResponder === self,
+              let layoutManager, let textContainer else {
+            formatToolbar.isHidden = true
+            return
+        }
+        if formatToolbar.superview !== self { addSubview(formatToolbar) }
+        formatToolbar.refresh()
+
+        let glyphs = layoutManager.glyphRange(forCharacterRange: selection, actualCharacterRange: nil)
+        var rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+        rect.origin.x += textContainerOrigin.x
+        rect.origin.y += textContainerOrigin.y
+
+        let size = formatToolbar.fittingSize
+        let gap: CGFloat = 8
+        var origin = NSPoint(x: rect.midX - size.width / 2, y: rect.minY - size.height - gap)
+        if origin.y < visibleRect.minY + 4 {
+            origin.y = rect.maxY + gap
+        }
+        origin.x = min(max(origin.x, bounds.minX + 8), bounds.maxX - size.width - 8)
+        formatToolbar.frame = NSRect(origin: origin, size: size)
+        formatToolbar.isHidden = false
+    }
+}
+
+/// Floating bar shown above selected text: turn the block into another type, or style the text.
+final class FormatToolbar: NSView {
+    private weak var textView: PaperTextView?
+    private let turnIntoButton = NSButton(title: "Text", target: nil, action: nil)
+    private let stack = NSStackView()
+
+    private static let blockTypes: [(String, Selector)] = [
+        ("Text", #selector(PaperTextView.setLineText(_:))),
+        ("Heading 1", #selector(PaperTextView.setLineHeading1(_:))),
+        ("Heading 2", #selector(PaperTextView.setLineHeading2(_:))),
+        ("Heading 3", #selector(PaperTextView.setLineHeading3(_:))),
+        ("Bullet list", #selector(PaperTextView.setLineBullet(_:))),
+        ("Numbered list", #selector(PaperTextView.setLineNumbered(_:))),
+        ("Quote", #selector(PaperTextView.setLineQuote(_:))),
+        ("Callout", #selector(PaperTextView.setLineCallout(_:))),
+    ]
+
+    init(textView: PaperTextView) {
+        self.textView = textView
+        super.init(frame: .zero)
+        isHidden = true
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.white.cgColor
+        layer?.cornerRadius = 8
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.black.withAlphaComponent(0.1).cgColor
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = 0.12
+        layer?.shadowRadius = 8
+        layer?.shadowOffset = CGSize(width: 0, height: -2)
+        layer?.masksToBounds = false
+
+        turnIntoButton.isBordered = false
+        turnIntoButton.font = .systemFont(ofSize: 13, weight: .medium)
+        turnIntoButton.contentTintColor = NSColor.black.withAlphaComponent(0.8)
+        turnIntoButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 9, weight: .semibold))
+        turnIntoButton.imagePosition = .imageTrailing
+        turnIntoButton.refusesFirstResponder = true
+        turnIntoButton.target = self
+        turnIntoButton.action = #selector(showTurnIntoMenu)
+        turnIntoButton.toolTip = "Turn into"
+        turnIntoButton.heightAnchor.constraint(equalToConstant: 28).isActive = true
+
+        stack.orientation = .horizontal
+        stack.spacing = 2
+        stack.edgeInsets = NSEdgeInsets(top: 2, left: 8, bottom: 2, right: 4)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(turnIntoButton)
+        stack.addArrangedSubview(separator())
+        stack.addArrangedSubview(iconButton("bold", "Bold  ⌘B", #selector(PaperTextView.toggleBoldMarkdown(_:))))
+        stack.addArrangedSubview(iconButton("italic", "Italic  ⌘I", #selector(PaperTextView.toggleItalicMarkdown(_:))))
+        stack.addArrangedSubview(iconButton("strikethrough", "Strikethrough  ⇧⌘X",
+                                            #selector(PaperTextView.toggleStrikeMarkdown(_:))))
+        stack.addArrangedSubview(iconButton("chevron.left.forwardslash.chevron.right", "Inline code  ⌘E",
+                                            #selector(PaperTextView.toggleCodeMarkdown(_:))))
+        stack.addArrangedSubview(iconButton("highlighter", "Highlight  ⇧⌘H",
+                                            #selector(PaperTextView.toggleHighlightMarkdown(_:))))
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    func refresh() {
+        guard let textView else { return }
+        turnIntoButton.title = textView.currentBlockLabel()
+        turnIntoButton.isEnabled = !textView.caretIsOnTitle
+    }
+
+    private func iconButton(_ symbol: String, _ tip: String, _ action: Selector) -> NSButton {
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)?
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .medium)) ?? NSImage()
+        let button = NSButton(image: image, target: textView, action: action)
+        button.isBordered = false
+        button.contentTintColor = NSColor.black.withAlphaComponent(0.75)
+        button.toolTip = tip
+        button.refusesFirstResponder = true
+        button.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        button.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        return button
+    }
+
+    private func separator() -> NSView {
+        let line = NSView()
+        line.wantsLayer = true
+        line.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.1).cgColor
+        line.widthAnchor.constraint(equalToConstant: 1).isActive = true
+        line.heightAnchor.constraint(equalToConstant: 16).isActive = true
+        return line
+    }
+
+    @objc private func showTurnIntoMenu() {
+        guard let textView else { return }
+        let current = textView.currentBlockLabel()
+        let menu = NSMenu()
+        for (title, action) in Self.blockTypes {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = textView
+            item.state = title == current ? .on : .off
+            menu.addItem(item)
+        }
+        _ = menu.popUp(positioning: nil, at: NSPoint(x: 0, y: turnIntoButton.bounds.maxY + 4), in: turnIntoButton)
     }
 }
 #endif
