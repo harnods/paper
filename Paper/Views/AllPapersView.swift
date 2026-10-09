@@ -135,11 +135,11 @@ struct PaperThumbnail: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(document.title.isEmpty ? "Untitled" : document.title)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 11, weight: .bold, design: .serif))
                     .foregroundStyle(Color.black.opacity(document.title.isEmpty ? 0.3 : 1))
                     .lineLimit(2)
                 Text(previewText)
-                    .font(.system(size: 7))
+                    .font(.system(size: 7, design: .serif))
                     .foregroundStyle(Color.black.opacity(0.8))
                     .lineSpacing(1.5)
                     .lineLimit(16)

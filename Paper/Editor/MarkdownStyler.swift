@@ -68,21 +68,33 @@ enum MarkdownStyler {
     static let textColor = NSColor.black
     static let placeholderColor = NSColor.black.withAlphaComponent(0.25)
     static let highlightColor = NSColor(red: 1.0, green: 0.88, blue: 0.35, alpha: 0.55)
-    static let bodySize: CGFloat = 16
-    static let bodyLineHeight: CGFloat = 26
+    static let bodySize: CGFloat = 17
+    static let bodyLineHeight: CGFloat = 28
     static let blockSpacing: CGFloat = 12
     static let listItemSpacing: CGFloat = 4
     static let listIndent: CGFloat = 24
 
-    static var bodyFont: NSFont { .systemFont(ofSize: bodySize) }
+    static let bodyFont = serif(bodySize)
+
+    /// New York, the system serif. Falls back to SF if the serif design isn't available.
+    static func serif(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
+        let system = NSFont.systemFont(ofSize: size, weight: weight)
+        guard let descriptor = system.fontDescriptor.withDesign(.serif) else { return system }
+        return NSFont(descriptor: descriptor, size: size) ?? system
+    }
+
+    private static let titleFont = serif(36, weight: .bold)
+    private static let heading1Font = serif(30, weight: .semibold)
+    private static let heading2Font = serif(24, weight: .semibold)
+    private static let heading3Font = serif(20, weight: .semibold)
     private static let metrics = NSLayoutManager()
 
     static func font(for kind: LineKind) -> NSFont {
         switch kind {
-        case .title: .systemFont(ofSize: 36, weight: .bold)
-        case .heading(1): .systemFont(ofSize: 30, weight: .semibold)
-        case .heading(2): .systemFont(ofSize: 24, weight: .semibold)
-        case .heading: .systemFont(ofSize: 20, weight: .semibold)
+        case .title: titleFont
+        case .heading(1): heading1Font
+        case .heading(2): heading2Font
+        case .heading: heading3Font
         default: bodyFont
         }
     }
