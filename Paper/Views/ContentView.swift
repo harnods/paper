@@ -34,6 +34,9 @@ struct ContentView: View {
     @Binding var paperID: PersistentIdentifier?
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
+    #if os(macOS)
+    @State private var titlebarHeight: CGFloat = 0
+    #endif
 
     var body: some View {
         #if os(macOS)
@@ -56,7 +59,9 @@ struct ContentView: View {
                     .allowsHitTesting(false)
             }
         }
-        .frame(width: PaperLayout.windowSize.width, height: PaperLayout.windowSize.height)
+        .frame(width: PaperLayout.windowSize.width, height: PaperLayout.windowSize.height - titlebarHeight)
+        .ignoresSafeArea()
+        .background(TitlebarHeightReader(height: $titlebarHeight))
         .background(PaperWindowRegistrar(paperID: paperID))
         .preferredColorScheme(.light)
         .onAppear {

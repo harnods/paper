@@ -13,8 +13,7 @@ struct PaperApp: App {
                 .background(TransparentWindow())
         }
         .modelContainer(container)
-        // No title bar at all, so the window is exactly the paper (a hidden title bar still adds a strip).
-        .windowStyle(.plain)
+        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .defaultPosition(.center)
         .commands { PaperCommands(store: store) }
@@ -125,10 +124,33 @@ struct TransparentWindow: NSViewRepresentable {
             for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
                 window.standardWindowButton(button)?.isHidden = true
             }
-            // Every paper opens in the middle of the screen, new or reopened.
+            // Every paper opens in the middle of the screen, new or reopened. Centre again once the
+            // window has shrunk to the paper (see TitlebarHeightReader), then retrace the shadow,
+            // which follows what's drawn.
             window.center()
-            // The shadow is traced from what's drawn, so retrace it once the paper is on screen.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { window.invalidateShadow() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                window.center()
+                window.invalidateShadow()
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+/// Reports the height of the window's hidden title bar. macOS still reserves that strip above the
+/// content, so the content is shortened by it and stretched into it, making the window exactly
+/// the paper while keeping a normal (focusable, typeable) window.
+struct TitlebarHeightReader: NSViewRepresentable {
+    @Binding var height: CGFloat
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            let titlebar = window.frame.height - window.contentLayoutRect.height
+            if titlebar > 0, titlebar != height { height = titlebar }
         }
         return view
     }
