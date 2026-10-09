@@ -4,8 +4,6 @@ struct PaperView: View {
     @Binding var document: Document
     let isActive: Bool
 
-    @FocusState private var editorFocused: Bool
-
     private let cornerRadius: CGFloat = 16
     private let paperPadding: CGFloat = 40
 
@@ -13,19 +11,14 @@ struct PaperView: View {
         ZStack {
             paperBackground(document.paperStyle)
 
-            VStack(alignment: .leading, spacing: 0) {
-                if isActive {
-                    MarkdownEditorView(
-                        title: $document.title,
-                        content: $document.content,
-                        onEdit: { document.updatedAt = Date() }
-                    )
-                    .focused($editorFocused)
+            if isActive {
+                BlockEditorView(document: $document)
                     .padding(paperPadding)
                     #if os(macOS)
                     .padding(.top, 12)
                     #endif
-                } else {
+            } else {
+                VStack(alignment: .leading) {
                     Text(document.title.isEmpty ? " " : document.title)
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(Color.primary)

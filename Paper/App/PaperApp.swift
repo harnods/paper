@@ -7,12 +7,12 @@ struct PaperApp: App {
         #if os(macOS)
         WindowGroup {
             ContentView()
-                .frame(minWidth: 500, minHeight: 400)
                 .background(TransparentWindow())
         }
         .modelContainer(for: Document.self)
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 680, height: 860)
+        .windowResizability(.contentSize)
         .commands {
             CommandGroup(replacing: .newItem) {}
         }
@@ -37,6 +37,8 @@ struct TransparentWindow: NSViewRepresentable {
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.isMovableByWindowBackground = true
+            window.setContentSize(NSSize(width: 680, height: 860))
+            window.styleMask.remove(.resizable)
         }
         return view
     }
