@@ -6,9 +6,6 @@ struct ContentView: View {
     @Query(sort: \Document.updatedAt, order: .reverse) private var documents: [Document]
     @State private var selectedDocument: Document?
     @State private var showDocumentList = false
-    #if os(macOS)
-    @State private var isHovering = false
-    #endif
 
     var body: some View {
         ZStack {
@@ -24,15 +21,47 @@ struct ContentView: View {
                     isActive: true
                 )
             }
-
-            #if os(macOS)
-            controlsOverlay
-            #endif
         }
         .ignoresSafeArea()
-        #if os(macOS)
-        .onHover { isHovering = $0 }
-        #endif
+        .contextMenu {
+            Button("New paper") {
+                createNewDocument()
+            }
+
+            Divider()
+
+            if let doc = selectedDocument {
+                Menu("Paper style") {
+                    ForEach(PaperStyle.allCases) { style in
+                        Button(action: { doc.paperStyle = style }) {
+                            HStack {
+                                Text(style.label)
+                                if doc.paperStyle == style {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if documents.count > 1 {
+                Divider()
+
+                Menu("Switch paper") {
+                    ForEach(documents) { doc in
+                        Button(action: { selectedDocument = doc }) {
+                            HStack {
+                                Text(doc.title.isEmpty ? "Untitled" : doc.title)
+                                if selectedDocument?.id == doc.id {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         .onAppear {
             if documents.isEmpty {
                 createNewDocument()
@@ -40,6 +69,11 @@ struct ContentView: View {
                 selectedDocument = documents.first
             }
         }
+        #if os(macOS)
+        .onReceive(NotificationCenter.default.publisher(for: .createNewPaper)) { _ in
+            createNewDocument()
+        }
+        #endif
         .sheet(isPresented: $showDocumentList) {
             DocumentListView(
                 documents: documents,
@@ -49,57 +83,6 @@ struct ContentView: View {
             )
         }
     }
-
-    #if os(macOS)
-    private var controlsOverlay: some View {
-        VStack {
-            HStack {
-                if documents.count > 1 {
-                    Button(action: { showDocumentList = true }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "doc.on.doc")
-                                .font(.system(size: 12, weight: .medium))
-                            Text("\(documents.count)")
-                                .font(.system(size: 12, weight: .medium))
-                        }
-                        .foregroundStyle(Color.secondary)
-                        .opacity(0.5)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.black.opacity(0.04), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Spacer()
-
-                HStack(spacing: 8) {
-                    if let doc = selectedDocument {
-                        PaperStylePicker(style: Binding(
-                            get: { doc.paperStyle },
-                            set: { doc.paperStyle = $0 }
-                        ))
-                    }
-
-                    Button(action: createNewDocument) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(Color.secondary)
-                            .opacity(0.4)
-                            .frame(width: 28, height: 28)
-                            .background(Color.black.opacity(0.04), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(16)
-
-            Spacer()
-        }
-        .opacity(isHovering ? 1 : 0)
-        .animation(.easeInOut(duration: 0.25), value: isHovering)
-    }
-    #endif
 
     private func binding(for document: Document) -> Binding<Document> {
         Binding(

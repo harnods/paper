@@ -7,9 +7,7 @@ struct BlockRowView: View {
     var onBackspaceEmpty: () -> Void
     var onTypeChange: (BlockType) -> Void
 
-    #if os(macOS)
-    @State private var isHovering = false
-    #endif
+    @State private var showSlashMenu = false
 
     var body: some View {
         if block.type == .divider {
@@ -24,9 +22,6 @@ struct BlockRowView: View {
                     }
             }
             .padding(.vertical, blockVerticalPadding)
-            #if os(macOS)
-            .onHover { isHovering = $0 }
-            #endif
             .contextMenu { blockContextMenu }
         }
     }
@@ -80,6 +75,51 @@ struct BlockRowView: View {
             .italic(block.type == .quote)
             .textFieldStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
+            #if os(macOS)
+            .onKeyPress(.return) {
+                onReturn("")
+                return .handled
+            }
+            #endif
+            .popover(isPresented: $showSlashMenu, arrowEdge: .bottom) {
+                slashCommandMenu
+            }
+    }
+
+    @ViewBuilder
+    private var slashCommandMenu: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(BlockType.allCases) { type in
+                Button(action: {
+                    block.content = ""
+                    onTypeChange(type)
+                    showSlashMenu = false
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: type.icon)
+                            .font(.system(size: 12))
+                            .frame(width: 20)
+                            .foregroundStyle(Color.secondary)
+                        Text(type.label)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.primary)
+                        Spacer()
+                        if let prefix = type.markdownPrefix {
+                            Text(prefix.trimmingCharacters(in: .whitespaces))
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(Color.secondary)
+                                .opacity(0.6)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 4)
+        .frame(width: 200)
     }
 
     private var dividerView: some View {
@@ -141,7 +181,7 @@ struct BlockRowView: View {
         case .heading3: "Heading 3"
         case .quote: "Quote"
         case .callout: "Callout"
-        default: "Type '/' for commands"
+        default: "Type / for commands..."
         }
     }
 
@@ -151,6 +191,11 @@ struct BlockRowView: View {
             let after = String(new[newlineRange.upperBound...])
             block.content = before
             onReturn(after)
+            return
+        }
+
+        if block.type == .paragraph && new == "/" {
+            showSlashMenu = true
             return
         }
 

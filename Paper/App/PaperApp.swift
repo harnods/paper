@@ -14,7 +14,12 @@ struct PaperApp: App {
         .defaultSize(width: 680, height: 860)
         .windowResizability(.contentSize)
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                Button("New paper") {
+                    NotificationCenter.default.post(name: .createNewPaper, object: nil)
+                }
+                .keyboardShortcut("n")
+            }
         }
         #else
         WindowGroup {
@@ -23,6 +28,10 @@ struct PaperApp: App {
         .modelContainer(for: Document.self)
         #endif
     }
+}
+
+extension Notification.Name {
+    static let createNewPaper = Notification.Name("createNewPaper")
 }
 
 #if os(macOS)

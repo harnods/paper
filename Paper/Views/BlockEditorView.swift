@@ -14,11 +14,14 @@ struct BlockEditorView: View {
                 .opacity(0.85)
                 .textFieldStyle(.plain)
                 .padding(.bottom, 20)
-                .onSubmit {
+                #if os(macOS)
+                .onKeyPress(.return) {
                     if let first = blocks.first {
                         focusedBlockID = first.id
                     }
+                    return .handled
                 }
+                #endif
                 .onChange(of: document.title) { _, _ in
                     document.updatedAt = Date()
                 }
@@ -51,8 +54,10 @@ struct BlockEditorView: View {
             if blocks.isEmpty {
                 blocks = [Block()]
             }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                focusedBlockID = blocks.first?.id
+            }
         }
-        .onChange(of: focusedBlockID) { _, _ in }
         .onChange(of: needsFocusBlock) { _, newValue in
             if let id = newValue {
                 focusedBlockID = id

@@ -74,11 +74,11 @@ struct PaperTexture: View {
 
 struct DotPattern: View {
     let spacing: CGFloat = 24
-    let dotSize: CGFloat = 2.5
+    let dotSize: CGFloat = 3.0
 
     var body: some View {
         Canvas { context, size in
-            let color = Color.black.opacity(0.15)
+            let color = Color.black.opacity(0.25)
             let startX = spacing
             let startY = spacing * 3
 
@@ -103,11 +103,11 @@ struct DotPattern: View {
 
 struct LinePattern: View {
     let spacing: CGFloat = 32
-    let lineWidth: CGFloat = 0.5
+    let lineWidth: CGFloat = 0.8
 
     var body: some View {
         Canvas { context, size in
-            let color = Color.black.opacity(0.12)
+            let color = Color.black.opacity(0.18)
             let startY = spacing * 3
 
             var y = startY
