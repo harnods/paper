@@ -50,7 +50,7 @@ struct StackedSheets: View {
             ForEach((0..<count).reversed(), id: \.self) { index in
                 let depth = CGFloat(index + 1)
                 RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous)
-                    .fill(Color(white: 1 - 0.025 * depth))
+                    .fill(Color(white: 1 - 0.025 * Double(index + 1)))
                     .frame(width: PaperLayout.paperSize.width - 18 * depth,
                            height: PaperLayout.paperSize.height)
                     .rotationEffect(.degrees(index == 0 ? -0.8 : 1.1))
