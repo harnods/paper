@@ -249,6 +249,23 @@ struct MarkdownEditor: NSViewRepresentable {
             ) { [weak self] _ in
                 MainActor.assumeIsolated { self?.flushSave() }
             })
+            observers.append(NotificationCenter.default.addObserver(
+                forName: .paperChangedOnDisk, object: document, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.showChangesFromDisk() }
+            })
+        }
+
+        /// The paper was edited on the other device. Show it, unless there are edits here still to save.
+        private func showChangesFromDisk() {
+            guard unsavedText == nil, let textView = textView as? PaperTextView,
+                  textView.string != document.markdown else { return }
+            let selection = textView.selectedRange()
+            textView.string = document.markdown
+            textView.restyle()
+            textView.undoManager?.removeAllActions()
+            let length = (textView.string as NSString).length
+            textView.setSelectedRange(NSRange(location: min(selection.location, length), length: 0))
         }
 
         func attachChip(_ chip: ScrollToBottomChip, to scrollView: NSScrollView, textView: NSTextView) {
@@ -323,6 +340,7 @@ struct MarkdownEditor: NSViewRepresentable {
             guard let text = unsavedText else { return }
             unsavedText = nil
             document.markdown = text
+            store.writeFiles()
         }
 
         func paperMenuItems() -> [NSMenuItem] {

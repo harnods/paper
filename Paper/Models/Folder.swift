@@ -9,6 +9,8 @@ final class Folder {
     var name: String = ""
     var parentID: String?
     var createdAt: Date = Date()
+    /// Path of the folder relative to the Paper folder in iCloud Drive; nil until it's created there.
+    var syncedPath: String?
 
     init(name: String, parentID: String?) {
         self.folderID = UUID().uuidString

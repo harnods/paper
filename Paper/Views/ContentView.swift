@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 enum PaperLayout {
     /// The window is exactly the paper, so system highlights (Mission Control, App Exposé) hug it;
@@ -69,12 +70,7 @@ struct ContentView: View {
             openWindow(value: id)
         }
         #else
-        if let doc = store.document(for: paperID) ?? store.documents.first {
-            SimpleEditor(document: doc)
-                .id(doc.persistentModelID)
-        } else {
-            Color.white.onAppear { paperID = store.defaultPaperID() }
-        }
+        PaperLibraryView(store: store)
         #endif
     }
 
@@ -90,8 +86,91 @@ struct ContentView: View {
 }
 
 #if os(iOS)
+/// iPhone: connect the iCloud Drive "Paper" folder once, then browse folders and papers.
+struct PaperLibraryView: View {
+    let store: PaperStore
+    @State private var choosingFolder = false
+
+    var body: some View {
+        Group {
+            if store.folderURL == nil {
+                connectFolder
+            } else {
+                NavigationStack {
+                    PaperListView(store: store, folderID: nil)
+                }
+            }
+        }
+        .preferredColorScheme(.light)
+        .fileImporter(isPresented: $choosingFolder, allowedContentTypes: [.folder]) { result in
+            if case .success(let url) = result { store.chooseFolder(url) }
+        }
+    }
+
+    private var connectFolder: some View {
+        VStack(spacing: 16) {
+            Text("Connect your papers")
+                .font(.system(size: 24, weight: .semibold))
+            Text("Open Paper on your Mac first. It makes a folder called Paper in iCloud Drive. Then choose that folder here.")
+                .font(.system(size: 16))
+                .foregroundStyle(Color.black.opacity(0.6))
+                .multilineTextAlignment(.center)
+            Button("Choose Paper folder") { choosingFolder = true }
+                .buttonStyle(.borderedProminent)
+                .tint(.black)
+                .padding(.top, 8)
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.white)
+    }
+}
+
+struct PaperListView: View {
+    let store: PaperStore
+    let folderID: String?
+
+    var body: some View {
+        List {
+            ForEach(store.folders(in: folderID), id: \.folderID) { folder in
+                NavigationLink {
+                    PaperListView(store: store, folderID: folder.folderID)
+                } label: {
+                    Label(folder.name, systemImage: "folder")
+                }
+            }
+            ForEach(store.papers(in: folderID), id: \.persistentModelID) { paper in
+                NavigationLink {
+                    SimpleEditor(document: paper, store: store)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(paper.title.isEmpty ? "Untitled" : paper.title)
+                        Text(paper.updatedAt, format: .relative(presentation: .named))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .onDelete { offsets in
+                let papers = store.papers(in: folderID)
+                for index in offsets { store.delete(papers[index]) }
+            }
+        }
+        .navigationTitle(store.folder(for: folderID)?.name ?? "All papers")
+        .refreshable { store.syncFiles() }
+        .toolbar {
+            Button("New paper", systemImage: "square.and.pencil") {
+                let id = store.newPaper()
+                if let paper = store.document(for: id) { store.move(paper, to: folderID) }
+            }
+        }
+    }
+}
+
+/// Plain text for now; the full editor comes next.
 struct SimpleEditor: View {
     let document: Document
+    let store: PaperStore
     @State private var text = ""
 
     var body: some View {
@@ -102,7 +181,13 @@ struct SimpleEditor: View {
             .padding(24)
             .background(Color.white)
             .onAppear { text = document.markdown }
-            .onChange(of: text) { _, newValue in document.markdown = newValue }
+            .onChange(of: text) { _, newValue in
+                if newValue != document.markdown { document.markdown = newValue }
+            }
+            .onDisappear { store.writeFiles() }
+            .onReceive(NotificationCenter.default.publisher(for: .paperChangedOnDisk, object: document)) { _ in
+                text = document.markdown
+            }
     }
 }
 #endif
