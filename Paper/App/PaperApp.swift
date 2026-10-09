@@ -60,8 +60,6 @@ struct PaperCommands: Commands {
                 .keyboardShortcut("1")
             Button("Dotted") { setStyle(.dotted) }
                 .keyboardShortcut("2")
-            Button("Ruled") { setStyle(.lines) }
-                .keyboardShortcut("3")
             Divider()
             Button("Delete paper") {
                 if let focusedPaper { store.delete(focusedPaper) }

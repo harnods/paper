@@ -8,6 +8,8 @@ final class PaperClipView: NSClipView {
         didSet { if style != oldValue { needsDisplay = true } }
     }
 
+    private static let dotSpacing: CGFloat = 26
+
     private static let grain: NSColor = {
         let size = 128
         guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size,
@@ -37,36 +39,18 @@ final class PaperClipView: NSClipView {
         Self.grain.setFill()
         dirtyRect.fill(using: .sourceOver)
 
-        // Rows line up with the text: they start at the page inset, one row per body line.
-        let unit = MarkdownStyler.gridUnit
-        let origin = MarkdownStyler.pageInset
-        let firstRow = ((dirtyRect.minY - origin) / unit).rounded(.down) - 1
-
-        switch style {
-        case .plain:
-            break
-        case .dotted:
-            NSColor.black.withAlphaComponent(0.2).setFill()
-            let dot: CGFloat = 2.6
-            let columns = Int(bounds.width / unit)
-            var row = firstRow
-            while origin + row * unit < dirtyRect.maxY + unit {
-                let y = origin + row * unit
-                for column in 1..<max(columns, 1) {
-                    let x = CGFloat(column) * unit
-                    NSBezierPath(ovalIn: NSRect(x: x - dot / 2, y: y - dot / 2, width: dot, height: dot)).fill()
-                }
-                row += 1
+        guard style == .dotted else { return }
+        let spacing = Self.dotSpacing
+        NSColor.black.withAlphaComponent(0.2).setFill()
+        let dot: CGFloat = 2.6
+        let columns = Int(bounds.width / spacing)
+        var y = ((dirtyRect.minY / spacing).rounded(.down)) * spacing
+        while y < dirtyRect.maxY + spacing {
+            for column in 1..<max(columns, 1) {
+                let x = CGFloat(column) * spacing
+                NSBezierPath(ovalIn: NSRect(x: x - dot / 2, y: y - dot / 2, width: dot, height: dot)).fill()
             }
-        case .lines:
-            // Each ruled line sits where a row's text baseline is, so writing rests on the line.
-            NSColor(red: 0.35, green: 0.55, blue: 0.85, alpha: 0.22).setFill()
-            var row = firstRow
-            while origin + row * unit < dirtyRect.maxY + unit {
-                let y = (origin + row * unit + MarkdownStyler.gridBaseline).rounded()
-                NSRect(x: dirtyRect.minX, y: y, width: dirtyRect.width, height: 1).fill()
-                row += 1
-            }
+            y += spacing
         }
     }
 
@@ -191,7 +175,6 @@ struct MarkdownEditor: NSViewRepresentable {
         scrollView.addSubview(chip)
         context.coordinator.attachChip(chip, to: scrollView, textView: textView)
 
-        textView.paperStyle = style
         textView.string = document.markdown
         textView.restyle()
         textView.undoManager?.removeAllActions()
@@ -205,7 +188,6 @@ struct MarkdownEditor: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         (scrollView.contentView as? PaperClipView)?.style = style
-        (scrollView.documentView as? PaperTextView)?.paperStyle = style
     }
 
     @MainActor

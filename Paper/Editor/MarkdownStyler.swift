@@ -73,9 +73,7 @@ enum MarkdownStyler {
     static let listItemSpacing: CGFloat = 4
     static let listIndent: CGFloat = 24
     static let numberIndent: CGFloat = 28
-    /// Row height of the dotted and ruled paper; in grid mode every line snaps to whole rows.
-    static let gridUnit: CGFloat = 28
-    /// Space around the text on the page: two grid rows, so the first line starts on a row.
+    /// Space around the text on the page.
     static let pageInset: CGFloat = 56
 
     static let bodyFont = NSFont.systemFont(ofSize: bodySize)
@@ -132,24 +130,23 @@ enum MarkdownStyler {
     }
 
     /// Restyles the whole storage; returns each line's kind and the hidden syntax ranges.
-    /// `grid` snaps every line to whole rows of the dotted or ruled paper.
     @discardableResult
-    static func style(_ storage: NSTextStorage, grid: Bool) -> StyleResult {
+    static func style(_ storage: NSTextStorage) -> StyleResult {
         let ns = storage.string as NSString
         let full = NSRange(location: 0, length: ns.length)
         var result = StyleResult(kinds: [], hidden: [])
 
         storage.beginEditing()
-        storage.setAttributes(attributes(for: .body, grid: grid), range: full)
+        storage.setAttributes(attributes(for: .body), range: full)
 
         var lineIndex = 0
         ns.enumerateSubstrings(in: full, options: [.byParagraphs, .substringNotRequired]) { _, range, enclosing, _ in
             let line = ns.substring(with: range)
             let info = parse(line, isFirst: lineIndex == 0)
             result.kinds.append(info.kind)
-            styleLine(storage, range: range, enclosing: enclosing, line: line, info: info, grid: grid, result: &result)
+            styleLine(storage, range: range, enclosing: enclosing, line: line, info: info, result: &result)
             if lineIndex == 1 {
-                addSpaceBelowTitle(storage, enclosing: enclosing, gap: grid ? gridUnit : titleGap)
+                addSpaceBelowTitle(storage, enclosing: enclosing)
             }
             lineIndex += 1
         }
@@ -162,33 +159,28 @@ enum MarkdownStyler {
         return result
     }
 
-    static func attributes(for kind: LineKind, grid: Bool, info: LineInfo? = nil,
+    static func attributes(for kind: LineKind, info: LineInfo? = nil,
                            markerWidth: CGFloat = 0) -> [NSAttributedString.Key: Any] {
         let font = font(for: kind)
         let paragraph = NSMutableParagraphStyle()
         // A fixed line height (also keeps lines made only of hidden syntax at full height).
-        let height = lineHeight(for: kind, grid: grid)
+        let height = lineHeight(for: kind)
         paragraph.minimumLineHeight = height
         paragraph.maximumLineHeight = height
 
-        if grid {
-            // Whole rows only: one empty row above headings, nothing between other blocks.
-            if case .heading = kind { paragraph.paragraphSpacingBefore = gridUnit }
-        } else {
-            switch kind {
-            case .title:
-                break
-            case .heading(let level):
-                paragraph.paragraphSpacingBefore = level == 1 ? 20 : level == 2 ? 16 : 12
-                paragraph.paragraphSpacing = 6
-            case .bullet, .numbered:
-                paragraph.paragraphSpacing = listItemSpacing
-            case .callout:
-                paragraph.paragraphSpacingBefore = 6
-                paragraph.paragraphSpacing = blockSpacing + 6
-            default:
-                paragraph.paragraphSpacing = blockSpacing
-            }
+        switch kind {
+        case .title:
+            break
+        case .heading(let level):
+            paragraph.paragraphSpacingBefore = level == 1 ? 20 : level == 2 ? 16 : 12
+            paragraph.paragraphSpacing = 6
+        case .bullet, .numbered:
+            paragraph.paragraphSpacing = listItemSpacing
+        case .callout:
+            paragraph.paragraphSpacingBefore = 6
+            paragraph.paragraphSpacing = blockSpacing + 6
+        default:
+            paragraph.paragraphSpacing = blockSpacing
         }
 
         let level = CGFloat(info?.level ?? 0)
@@ -214,7 +206,7 @@ enum MarkdownStyler {
             .font: font,
             .foregroundColor: textColor,
             .paragraphStyle: paragraph,
-            .baselineOffset: baselineOffset(for: kind, grid: grid),
+            .baselineOffset: baselineOffset(for: kind),
         ]
     }
 
@@ -222,17 +214,8 @@ enum MarkdownStyler {
         metrics.defaultLineHeight(for: font)
     }
 
-    /// Rows of grid paper a line of this type takes up.
-    static func rows(for kind: LineKind) -> CGFloat {
-        switch kind {
-        case .title, .heading(1), .heading(2): return 2
-        default: return max(1, (naturalHeight(font(for: kind)) / gridUnit).rounded(.up))
-        }
-    }
-
     /// Line box height per block type.
-    static func lineHeight(for kind: LineKind, grid: Bool) -> CGFloat {
-        if grid { return rows(for: kind) * gridUnit }
+    static func lineHeight(for kind: LineKind) -> CGFloat {
         let font = font(for: kind)
         let natural = naturalHeight(font)
         switch kind {
@@ -242,36 +225,26 @@ enum MarkdownStyler {
         }
     }
 
-    /// Distance from the top of a grid row to where body text's baseline sits; ruled lines go here.
-    static var gridBaseline: CGFloat {
-        (gridUnit - naturalHeight(bodyFont)) / 2 + bodyFont.ascender
-    }
-
-    /// Extra line height would otherwise all sit above the glyphs. Plain paper raises the baseline
-    /// by half of it (text centred, like CSS line-height). Grid paper puts every baseline on the
-    /// row's ruled line, so headings and the title sit on the line of their last row.
-    static func baselineOffset(for kind: LineKind, grid: Bool) -> CGFloat {
-        let font = font(for: kind)
-        let height = lineHeight(for: kind, grid: grid)
-        guard grid else { return max(0, (height - naturalHeight(font)) / 2) }
-        let target = (rows(for: kind) - 1) * gridUnit + gridBaseline
-        return height + font.descender - target
+    /// Extra line height would otherwise all sit above the glyphs; raising the baseline by half of
+    /// it centres the text in its line box, like CSS line-height.
+    static func baselineOffset(for kind: LineKind) -> CGFloat {
+        max(0, (lineHeight(for: kind) - naturalHeight(font(for: kind))) / 2)
     }
 
     /// Distance from the top of a line box to the top of its text, for drawing alongside it.
-    static func textTop(for kind: LineKind, grid: Bool) -> CGFloat {
+    static func textTop(for kind: LineKind) -> CGFloat {
         let font = font(for: kind)
-        return lineHeight(for: kind, grid: grid) + font.descender - baselineOffset(for: kind, grid: grid) - font.ascender
+        return lineHeight(for: kind) + font.descender - baselineOffset(for: kind) - font.ascender
     }
 
-    /// Space between the title and the first block on plain paper, set as space before the first block.
+    /// Space between the title and the first block, set as space before the first block.
     static let titleGap: CGFloat = 28
 
-    private static func addSpaceBelowTitle(_ storage: NSTextStorage, enclosing: NSRange, gap: CGFloat) {
+    private static func addSpaceBelowTitle(_ storage: NSTextStorage, enclosing: NSRange) {
         guard enclosing.length > 0,
               let current = storage.attribute(.paragraphStyle, at: enclosing.location, effectiveRange: nil) as? NSParagraphStyle,
               let style = current.mutableCopy() as? NSMutableParagraphStyle else { return }
-        style.paragraphSpacingBefore = max(style.paragraphSpacingBefore, gap)
+        style.paragraphSpacingBefore = max(style.paragraphSpacingBefore, titleGap)
         storage.addAttribute(.paragraphStyle, value: style, range: enclosing)
     }
 
@@ -286,14 +259,14 @@ enum MarkdownStyler {
     }
 
     private static func styleLine(_ storage: NSTextStorage, range: NSRange, enclosing: NSRange, line: String,
-                                  info: LineInfo, grid: Bool, result: inout StyleResult) {
+                                  info: LineInfo, result: inout StyleResult) {
         let font = font(for: info.kind)
         let markerRange = NSRange(location: range.location, length: min(info.markerLength, range.length))
         let markerWidth = (storage.attributedSubstring(from: markerRange).string as NSString)
             .size(withAttributes: [.font: font]).width
 
         // Paragraph attributes span the newline so spacing applies even to empty lines.
-        storage.addAttributes(attributes(for: info.kind, grid: grid, info: info, markerWidth: markerWidth), range: enclosing)
+        storage.addAttributes(attributes(for: info.kind, info: info, markerWidth: markerWidth), range: enclosing)
 
         if info.hidesMarker {
             hide(markerRange, in: storage, isLinePrefix: true, result: &result)

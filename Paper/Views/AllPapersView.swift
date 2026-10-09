@@ -168,16 +168,6 @@ struct PaperThumbnail: View {
                     y += spacing
                 }
             }
-        case .lines:
-            Canvas { context, size in
-                let spacing: CGFloat = 9
-                var y = spacing
-                while y < size.height {
-                    context.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 0.5)),
-                                 with: .color(Color(red: 0.35, green: 0.55, blue: 0.85).opacity(0.3)))
-                    y += spacing
-                }
-            }
         }
     }
 

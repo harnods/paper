@@ -5,11 +5,6 @@ final class PaperTextView: NSTextView {
     private(set) var lineKinds: [LineKind] = []
     private var hiddenRanges: [HiddenRange] = []
     private lazy var formatToolbar = FormatToolbar(textView: self)
-    /// Dotted and ruled paper snap text to the grid; plain paper uses reading spacing.
-    var paperStyle: PaperStyle = .dotted {
-        didSet { if paperStyle != oldValue { restyle() } }
-    }
-    var isGrid: Bool { paperStyle != .plain }
     /// Selection left by a style action; the toolbar stays closed until the selection changes.
     private var dismissedSelection: NSRange?
     private var hoveredLine: Int?
@@ -46,7 +41,7 @@ final class PaperTextView: NSTextView {
 
     func restyle() {
         guard let storage = textStorage else { return }
-        let result = MarkdownStyler.style(storage, grid: isGrid)
+        let result = MarkdownStyler.style(storage)
         lineKinds = result.kinds
         hiddenRanges = result.hidden
         let full = NSRange(location: 0, length: storage.length)
@@ -65,15 +60,15 @@ final class PaperTextView: NSTextView {
         var attributes: [NSAttributedString.Key: Any]
         var isSpecial = true
         if (textStorage?.length ?? 0) == 0 {
-            attributes = MarkdownStyler.attributes(for: .title, grid: isGrid)
+            attributes = MarkdownStyler.attributes(for: .title)
         } else if ranges.count == 2, ranges[1].length == 0 {
-            attributes = MarkdownStyler.attributes(for: .body, grid: isGrid)
+            attributes = MarkdownStyler.attributes(for: .body)
             if let style = (attributes[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle {
-                style.paragraphSpacingBefore = isGrid ? MarkdownStyler.gridUnit : MarkdownStyler.titleGap
+                style.paragraphSpacingBefore = MarkdownStyler.titleGap
                 attributes[.paragraphStyle] = style
             }
         } else {
-            attributes = MarkdownStyler.attributes(for: .body, grid: isGrid)
+            attributes = MarkdownStyler.attributes(for: .body)
             isSpecial = false
         }
         typingAttributes = attributes
@@ -570,13 +565,13 @@ final class PaperTextView: NSTextView {
                 // Full-bleed: edge to edge of the paper, not just the text column.
                 let y = content.midY.rounded()
                 NSColor(red: 0xCA / 255, green: 0xD5 / 255, blue: 0xDA / 255, alpha: 1).setFill()
-                NSRect(x: bounds.minX, y: y - 0.75, width: bounds.width, height: 1.5).fill()
+                NSRect(x: bounds.minX, y: y, width: bounds.width, height: 1).fill()
             case .callout:
                 let box = NSRect(x: content.minX, y: content.minY - 8, width: content.width, height: content.height + 16)
                 NSColor.black.withAlphaComponent(0.04).setFill()
                 NSBezierPath(roundedRect: box, xRadius: 6, yRadius: 6).fill()
                 ("\u{1F4A1}" as NSString).draw(at: NSPoint(x: content.minX + 12,
-                                                         y: line.firstLine.minY + MarkdownStyler.textTop(for: .callout, grid: isGrid)),
+                                                         y: line.firstLine.minY + MarkdownStyler.textTop(for: .callout)),
                                                 withAttributes: [.font: MarkdownStyler.bodyFont])
             case .quote:
                 let bar = NSRect(x: content.minX + 2, y: content.minY + 1, width: 3, height: max(content.height - 2, 0))
@@ -585,7 +580,7 @@ final class PaperTextView: NSTextView {
             case .bullet:
                 let info = MarkdownStyler.parse(nsString.substring(with: ranges[index]), isFirst: false)
                 let x = content.minX + CGFloat(info.level) * MarkdownStyler.listIndent + 7
-                let y = line.firstLine.minY + MarkdownStyler.textTop(for: .bullet, grid: isGrid)
+                let y = line.firstLine.minY + MarkdownStyler.textTop(for: .bullet)
                 ("\u{2022}" as NSString).draw(at: NSPoint(x: x, y: y), withAttributes: [
                     .font: MarkdownStyler.bodyFont,
                     .foregroundColor: MarkdownStyler.textColor,
@@ -604,7 +599,7 @@ final class PaperTextView: NSTextView {
                 ]
                 let width = label.size(withAttributes: attributes).width
                 let right = content.minX + CGFloat(level) * MarkdownStyler.listIndent + MarkdownStyler.numberIndent - 6
-                let y = line.firstLine.minY + MarkdownStyler.textTop(for: .numbered(1), grid: isGrid)
+                let y = line.firstLine.minY + MarkdownStyler.textTop(for: .numbered(1))
                 label.draw(at: NSPoint(x: right - width, y: y), withAttributes: attributes)
             default:
                 break
@@ -638,7 +633,7 @@ final class PaperTextView: NSTextView {
                 ? textStorage?.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle
                 : nil
             let x = line.content.minX + max(style?.firstLineHeadIndent ?? 0, style?.headIndent ?? 0)
-            let y = line.firstLine.minY + MarkdownStyler.textTop(for: info.kind, grid: isGrid)
+            let y = line.firstLine.minY + MarkdownStyler.textTop(for: info.kind)
             (text as NSString).draw(at: NSPoint(x: x, y: y), withAttributes: [
                 .font: MarkdownStyler.font(for: info.kind),
                 .foregroundColor: MarkdownStyler.placeholderColor,
@@ -690,7 +685,7 @@ final class PaperTextView: NSTextView {
         let height = ceil(font.ascender - font.descender)
         if rect.height > height {
             // Match the caret to where the text sits in its line box.
-            rect.origin.y += MarkdownStyler.textTop(for: kind, grid: isGrid).rounded()
+            rect.origin.y += MarkdownStyler.textTop(for: kind).rounded()
             rect.size.height = height
         }
         super.drawInsertionPoint(in: rect, color: color, turnedOn: flag)

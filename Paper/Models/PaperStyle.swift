@@ -3,7 +3,6 @@ import Foundation
 enum PaperStyle: String, CaseIterable, Identifiable {
     case plain
     case dotted
-    case lines
 
     var id: String { rawValue }
 
@@ -11,7 +10,6 @@ enum PaperStyle: String, CaseIterable, Identifiable {
         switch self {
         case .plain: "Plain"
         case .dotted: "Dotted"
-        case .lines: "Ruled"
         }
     }
 }
