@@ -14,7 +14,7 @@ struct PaperApp: App {
         }
         .modelContainer(container)
         .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
+        .defaultSize(width: PaperLayout.paperSize.width, height: PaperLayout.paperSize.height)
         .defaultPosition(.center)
         .commands { PaperCommands(store: store) }
 
@@ -120,18 +120,21 @@ struct TransparentWindow: NSViewRepresentable {
             window.titlebarSeparatorStyle = .none
             window.isMovableByWindowBackground = true
             window.styleMask.remove(.resizable)
+            window.styleMask.insert(.fullSizeContentView)
             window.tabbingMode = .disallowed
+            // AppKit owns the size: the whole window, title bar area included, is exactly the paper,
+            // and the content simply fills it. (Letting SwiftUI size it left a transparent strip.)
+            let size = PaperLayout.paperSize
+            window.minSize = size
+            window.maxSize = size
+            window.setFrame(NSRect(origin: window.frame.origin, size: size), display: true)
             for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
                 window.standardWindowButton(button)?.isHidden = true
             }
-            // Every paper opens in the middle of the screen, new or reopened. Centre again once the
-            // window has shrunk to the paper (see TitlebarHeightReader), then retrace the shadow,
-            // which follows what's drawn.
+            // Every paper opens in the middle of the screen, new or reopened.
             window.center()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                window.center()
-                window.invalidateShadow()
-            }
+            // The shadow is traced from what's drawn, so retrace it once the paper is on screen.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { window.invalidateShadow() }
         }
         return view
     }
@@ -139,22 +142,4 @@ struct TransparentWindow: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-/// Reports the height of the window's hidden title bar. macOS still reserves that strip above the
-/// content, so the content is shortened by it and stretched into it, making the window exactly
-/// the paper while keeping a normal (focusable, typeable) window.
-struct TitlebarHeightReader: NSViewRepresentable {
-    @Binding var height: CGFloat
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
-            let titlebar = window.frame.height - window.contentLayoutRect.height
-            if titlebar > 0, titlebar != height { height = titlebar }
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-}
 #endif

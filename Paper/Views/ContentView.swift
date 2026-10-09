@@ -2,10 +2,9 @@ import SwiftUI
 import SwiftData
 
 enum PaperLayout {
-    static let paperSize = CGSize(width: 660, height: 830)
     /// The window is exactly the paper, so system highlights (Mission Control, App Exposé) hug it;
     /// the shadow comes from the window itself, which follows the paper's rounded shape.
-    static let windowSize = paperSize
+    static let paperSize = CGSize(width: 660, height: 830)
     static let cornerRadius: CGFloat = 28
 }
 
@@ -34,9 +33,6 @@ struct ContentView: View {
     @Binding var paperID: PersistentIdentifier?
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
-    #if os(macOS)
-    @State private var titlebarHeight: CGFloat = 0
-    #endif
 
     var body: some View {
         #if os(macOS)
@@ -44,24 +40,21 @@ struct ContentView: View {
             if let doc = store.document(for: paperID) {
                 RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous)
                     .fill(Color.white)
-                    .frame(width: PaperLayout.paperSize.width, height: PaperLayout.paperSize.height)
 
                 MarkdownEditor(document: doc, style: doc.paperStyle, store: store, actions: actions(for: doc))
                     .id(doc.persistentModelID)
-                    .frame(width: PaperLayout.paperSize.width, height: PaperLayout.paperSize.height)
                     .clipShape(RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous))
                     .focusedSceneValue(\.paperDocument, doc)
 
                 // Hairline on the paper's edge.
                 RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous)
                     .strokeBorder(Color.black.opacity(0.1), lineWidth: 1)
-                    .frame(width: PaperLayout.paperSize.width, height: PaperLayout.paperSize.height)
                     .allowsHitTesting(false)
             }
         }
-        .frame(width: PaperLayout.windowSize.width, height: PaperLayout.windowSize.height - titlebarHeight)
+        // Fill the whole window, title bar area included; AppKit sizes the window to the paper.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()
-        .background(TitlebarHeightReader(height: $titlebarHeight))
         .background(PaperWindowRegistrar(paperID: paperID))
         .preferredColorScheme(.light)
         .onAppear {
