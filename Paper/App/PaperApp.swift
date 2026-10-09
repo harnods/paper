@@ -8,7 +8,7 @@ struct PaperApp: App {
 
     var body: some Scene {
         #if os(macOS)
-        Window("Paper", id: "paper") {
+        Window("Paper", id: PaperWindowID.main) {
             ContentView(store: store)
                 .background(TransparentWindow())
         }
@@ -16,6 +16,18 @@ struct PaperApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .commands { PaperCommands(store: store) }
+
+        Window("All papers", id: PaperWindowID.allPapers) {
+            AllPapersView(store: store)
+        }
+        .modelContainer(container)
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultPosition(.top)
+
+        MenuBarExtra("Paper", systemImage: "doc.text") {
+            PaperMenuBarMenu(store: store)
+        }
         #else
         WindowGroup {
             ContentView(store: store)
@@ -28,6 +40,7 @@ struct PaperApp: App {
 #if os(macOS)
 struct PaperCommands: Commands {
     let store: PaperStore
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -36,6 +49,9 @@ struct PaperCommands: Commands {
         }
 
         CommandMenu("Paper") {
+            Button("View all papers") { openWindow(id: PaperWindowID.allPapers) }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+            Divider()
             Button("Next paper") { store.nextPaper() }
                 .keyboardShortcut("]")
             Button("Previous paper") { store.previousPaper() }
