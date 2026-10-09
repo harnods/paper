@@ -188,6 +188,9 @@ struct MarkdownEditor: NSViewRepresentable {
         scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
         scrollView.borderType = .noBorder
+        // Don't inset (and blur) content under the hidden title bar; the paper owns the whole window.
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.contentInsets = NSEdgeInsetsZero
         scrollView.wantsLayer = true
         scrollView.layer?.cornerRadius = PaperLayout.cornerRadius
         scrollView.layer?.cornerCurve = .continuous

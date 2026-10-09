@@ -117,6 +117,7 @@ struct TransparentWindow: NSViewRepresentable {
             window.appearance = NSAppearance(named: .aqua)
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
+            window.titlebarSeparatorStyle = .none
             window.isMovableByWindowBackground = true
             window.styleMask.remove(.resizable)
             window.tabbingMode = .disallowed
