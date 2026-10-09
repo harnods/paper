@@ -10,12 +10,14 @@ struct PaperStylePicker: View {
         HStack(spacing: 2) {
             ForEach(PaperStyle.allCases) { paperStyle in
                 Button(action: { style = paperStyle }) {
+                    let isSelected = style == paperStyle
                     Image(systemName: paperStyle.icon)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(style == paperStyle ? Color.primary.opacity(0.5) : Color.secondary.opacity(0.4))
+                        .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                        .opacity(isSelected ? 0.5 : 0.4)
                         .frame(width: 24, height: 24)
                         .background(
-                            style == paperStyle
+                            isSelected
                                 ? Color.black.opacity(0.05)
                                 : Color.clear,
                             in: RoundedRectangle(cornerRadius: 5, style: .continuous)
