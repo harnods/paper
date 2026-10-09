@@ -705,8 +705,8 @@ final class PaperTextView: NSTextView {
             }
         }
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
-        let ranges = lineRanges()
-        if (textStorage?.length ?? 0) == 0 || (ranges.count == 2 && ranges[1].length == 0) {
+        let lines = lineRanges()
+        if (textStorage?.length ?? 0) == 0 || (lines.count == 2 && lines[1].length == 0) {
             updateTypingAttributes()
             if let length = textStorage?.length {
                 layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: length),
