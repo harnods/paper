@@ -28,7 +28,8 @@ struct PaperView: View {
                 } else {
                     Text(document.title.isEmpty ? " " : document.title)
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(Color.primary.opacity(0.8))
+                        .foregroundStyle(Color.primary)
+                        .opacity(0.8)
                         .padding(paperPadding)
                     Spacer()
                 }
@@ -46,6 +47,8 @@ struct PaperView: View {
         ZStack {
             Color.white
 
+            PaperTexture()
+
             switch style {
             case .plain:
                 EmptyView()
@@ -58,13 +61,31 @@ struct PaperView: View {
     }
 }
 
+struct PaperTexture: View {
+    var body: some View {
+        Canvas { context, size in
+            for _ in 0..<1500 {
+                let x = CGFloat.random(in: 0..<size.width)
+                let y = CGFloat.random(in: 0..<size.height)
+                let opacity = Double.random(in: 0.01...0.025)
+                let dotSize = CGFloat.random(in: 0.5...1.5)
+                let rect = CGRect(x: x, y: y, width: dotSize, height: dotSize)
+                context.fill(
+                    Rectangle().path(in: rect),
+                    with: .color(Color.black.opacity(opacity))
+                )
+            }
+        }
+    }
+}
+
 struct DotPattern: View {
     let spacing: CGFloat = 24
-    let dotSize: CGFloat = 2
+    let dotSize: CGFloat = 2.5
 
     var body: some View {
         Canvas { context, size in
-            let color = Color.black.opacity(0.06)
+            let color = Color.black.opacity(0.15)
             let startX = spacing
             let startY = spacing * 3
 
@@ -93,7 +114,7 @@ struct LinePattern: View {
 
     var body: some View {
         Canvas { context, size in
-            let color = Color.black.opacity(0.06)
+            let color = Color.black.opacity(0.12)
             let startY = spacing * 3
 
             var y = startY

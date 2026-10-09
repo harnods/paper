@@ -13,6 +13,9 @@ struct PaperApp: App {
         .modelContainer(for: Document.self)
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 680, height: 860)
+        .commands {
+            CommandGroup(replacing: .newItem) {}
+        }
         #else
         WindowGroup {
             ContentView()
