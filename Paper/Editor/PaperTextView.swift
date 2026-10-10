@@ -758,6 +758,7 @@ final class PaperTextView: NSTextView {
         }
 
         drawPlaceholders(ranges: ranges, visible: visible)
+        drawBlockControls(ranges: ranges)
     }
 
     private func drawPlaceholders(ranges: [NSRange], visible: ClosedRange<Int>) {
@@ -793,10 +794,9 @@ final class PaperTextView: NSTextView {
         }
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let ranges = lineRanges()
-
+    /// The drop line and the hovered line's + and drag handle. Drawn with the background (they sit
+    /// in the margin or between lines, never over text): drawing them in draw(_:) didn't show up.
+    private func drawBlockControls(ranges: [NSRange]) {
         if let y = dropIndicatorY {
             let x = textContainerOrigin.x
             let width = (textContainer?.size.width ?? bounds.width)
