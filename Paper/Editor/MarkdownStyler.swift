@@ -98,7 +98,7 @@ enum MarkdownStyler {
     #endif
     /// The paper's title is set in Gochi Hand (bundled, SIL Open Font License); the system font is the fallback.
     private static let titleFont: PlatformFont = {
-        let size: CGFloat = isPhone ? 28 : 36
+        let size: CGFloat = isPhone ? 32 : 40
         if let url = Bundle.main.url(forResource: "GochiHand-Regular", withExtension: "ttf") {
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
         }
