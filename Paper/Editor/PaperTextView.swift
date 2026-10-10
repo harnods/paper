@@ -1001,7 +1001,7 @@ final class ToolbarButton: NSButton {
             hoverLayer.frame = bounds.insetBy(dx: 2, dy: 2)
             layer.insertSublayer(hoverLayer, at: 0)
         }
-        hoverLayer.backgroundColor = hovered ? NSColor.black.withAlphaComponent(0.06).cgColor : NSColor.clear.cgColor
+        hoverLayer.backgroundColor = hovered ? NSColor.white.withAlphaComponent(0.16).cgColor : NSColor.clear.cgColor
     }
 }
 
@@ -1030,13 +1030,14 @@ final class FormatToolbar: NSView {
         super.init(frame: .zero)
         isHidden = true
         wantsLayer = true
-        layer?.backgroundColor = NSColor.white.cgColor
-        layer?.cornerRadius = 10
+        // Dark, so it stands out from the white paper.
+        layer?.backgroundColor = NSColor(white: 0.11, alpha: 1).cgColor
+        layer?.cornerRadius = 12
         layer?.borderWidth = 1
-        layer?.borderColor = NSColor.black.withAlphaComponent(0.1).cgColor
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
         layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowOpacity = 0.12
-        layer?.shadowRadius = 8
+        layer?.shadowOpacity = 0.25
+        layer?.shadowRadius = 10
         layer?.shadowOffset = CGSize(width: 0, height: -2)
         layer?.masksToBounds = false
 
@@ -1047,21 +1048,21 @@ final class FormatToolbar: NSView {
         turnIntoButton.target = self
         turnIntoButton.action = #selector(showTurnIntoMenu)
         turnIntoButton.toolTip = "Turn into"
-        turnIntoLabel.font = .systemFont(ofSize: 14, weight: .medium)
-        turnIntoLabel.textColor = NSColor.black.withAlphaComponent(0.8)
+        turnIntoLabel.font = .systemFont(ofSize: 15, weight: .medium)
+        turnIntoLabel.textColor = NSColor.white.withAlphaComponent(0.95)
         turnIntoLabel.translatesAutoresizingMaskIntoConstraints = false
         let chevron = NSImageView(image: NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold)) ?? NSImage())
-        chevron.contentTintColor = NSColor.black.withAlphaComponent(0.6)
+            .withSymbolConfiguration(.init(pointSize: 11, weight: .semibold)) ?? NSImage())
+        chevron.contentTintColor = NSColor.white.withAlphaComponent(0.7)
         chevron.translatesAutoresizingMaskIntoConstraints = false
         turnIntoButton.addSubview(turnIntoLabel)
         turnIntoButton.addSubview(chevron)
         NSLayoutConstraint.activate([
-            turnIntoButton.heightAnchor.constraint(equalToConstant: 32),
-            turnIntoButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 128),
-            turnIntoLabel.leadingAnchor.constraint(equalTo: turnIntoButton.leadingAnchor, constant: 10),
+            turnIntoButton.heightAnchor.constraint(equalToConstant: 38),
+            turnIntoButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 140),
+            turnIntoLabel.leadingAnchor.constraint(equalTo: turnIntoButton.leadingAnchor, constant: 12),
             turnIntoLabel.centerYAnchor.constraint(equalTo: turnIntoButton.centerYAnchor),
-            chevron.trailingAnchor.constraint(equalTo: turnIntoButton.trailingAnchor, constant: -10),
+            chevron.trailingAnchor.constraint(equalTo: turnIntoButton.trailingAnchor, constant: -12),
             chevron.centerYAnchor.constraint(equalTo: turnIntoButton.centerYAnchor),
             chevron.leadingAnchor.constraint(greaterThanOrEqualTo: turnIntoLabel.trailingAnchor, constant: 8),
         ])
@@ -1102,23 +1103,23 @@ final class FormatToolbar: NSView {
 
     private func iconButton(_ symbol: String, _ tip: String, _ action: Selector) -> NSButton {
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)?
-            .withSymbolConfiguration(.init(pointSize: 15, weight: .medium)) ?? NSImage()
+            .withSymbolConfiguration(.init(pointSize: 17, weight: .medium)) ?? NSImage()
         let button = ToolbarButton(image: image, target: textView, action: action)
         button.isBordered = false
-        button.contentTintColor = NSColor.black.withAlphaComponent(0.75)
+        button.contentTintColor = NSColor.white.withAlphaComponent(0.92)
         button.toolTip = tip
         button.refusesFirstResponder = true
-        button.widthAnchor.constraint(equalToConstant: 32).isActive = true
-        button.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        button.widthAnchor.constraint(equalToConstant: 38).isActive = true
+        button.heightAnchor.constraint(equalToConstant: 38).isActive = true
         return button
     }
 
     private func separator() -> NSView {
         let line = NSView()
         line.wantsLayer = true
-        line.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.1).cgColor
+        line.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.18).cgColor
         line.widthAnchor.constraint(equalToConstant: 1).isActive = true
-        line.heightAnchor.constraint(equalToConstant: 16).isActive = true
+        line.heightAnchor.constraint(equalToConstant: 20).isActive = true
         return line
     }
 
