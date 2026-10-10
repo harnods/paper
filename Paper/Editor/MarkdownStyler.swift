@@ -1,3 +1,4 @@
+import CoreText
 #if os(macOS)
 import AppKit
 typealias PlatformFont = NSFont
@@ -95,7 +96,16 @@ enum MarkdownStyler {
     #else
     private static let isPhone = false
     #endif
-    private static let titleFont = PlatformFont.systemFont(ofSize: isPhone ? 28 : 36, weight: .semibold)
+    /// The paper's title is set in Gochi Hand (bundled, SIL Open Font License); the system font is the fallback.
+    private static let titleFont: PlatformFont = {
+        let size: CGFloat = isPhone ? 28 : 36
+        if let url = Bundle.main.url(forResource: "GochiHand-Regular", withExtension: "ttf") {
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        }
+        return PlatformFont(name: "GochiHand-Regular", size: size)
+            ?? PlatformFont(name: "Gochi Hand", size: size)
+            ?? PlatformFont.systemFont(ofSize: size, weight: .semibold)
+    }()
     private static let heading1Font = PlatformFont.systemFont(ofSize: isPhone ? 24 : 30, weight: .semibold)
     private static let heading2Font = PlatformFont.systemFont(ofSize: isPhone ? 20 : 24, weight: .semibold)
     private static let heading3Font = PlatformFont.systemFont(ofSize: isPhone ? 18 : 20, weight: .semibold)
