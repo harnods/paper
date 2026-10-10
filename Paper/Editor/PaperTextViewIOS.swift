@@ -347,44 +347,60 @@ final class PaperTextView: UITextView, UITextViewDelegate {
     }
 
     var currentHighlight: HighlightColor? {
-        HighlightColor.current(in: nsString, selection: selectedRange)
+        HighlightColor.current(in: nsString, selection: HighlightColor.trimmedSelection(selectedRange, in: textStorage))
     }
 
     /// Highlights the selection in `color`, changes the color of the highlight it's in, or removes it (nil).
     func applyHighlight(_ color: HighlightColor?) {
-        guard let edit = HighlightColor.edit(in: nsString, selection: selectedRange, color: color) else { return }
+        let selection = HighlightColor.trimmedSelection(selectedRange, in: textStorage)
+        guard let edit = HighlightColor.edit(in: nsString, selection: selection, color: color) else { return }
         replace(edit.range, with: edit.replacement)
         selectedRange = edit.selection
     }
 
-    /// Color choices for menus: one item per color, plus "Remove highlight" when there is one.
+    /// Color dots in a row (the current one ringed), plus a "no highlight" dot when there is one.
     func highlightMenu() -> UIMenu {
         let current = currentHighlight
         var items: [UIMenuElement] = HighlightColor.allCases.map { color in
-            UIAction(title: color.label, image: Self.swatch(color.color), state: color == current ? .on : .off) { [weak self] _ in
+            UIAction(title: color.label, image: Self.dot(color, selected: color == current)) { [weak self] _ in
                 self?.applyHighlight(color)
             }
         }
         if current != nil {
-            items.append(UIMenu(options: .displayInline, children: [
-                UIAction(title: "Remove highlight", image: UIImage(systemName: "xmark")) { [weak self] _ in
-                    self?.applyHighlight(nil)
-                },
-            ]))
+            items.append(UIAction(title: "Remove highlight", image: Self.dot(nil, selected: false)) { [weak self] _ in
+                self?.applyHighlight(nil)
+            })
         }
-        return UIMenu(title: "Highlight", image: UIImage(systemName: "highlighter"), children: items)
+        return UIMenu(title: "Highlight", image: UIImage(systemName: "highlighter"), options: .displayAsPalette, children: items)
     }
 
-    private static func swatch(_ color: UIColor) -> UIImage {
-        UIGraphicsImageRenderer(size: CGSize(width: 18, height: 18)).image { _ in
-            let path = UIBezierPath(roundedRect: CGRect(x: 1, y: 1, width: 16, height: 16), cornerRadius: 4)
+    private static func dot(_ color: HighlightColor?, selected: Bool) -> UIImage {
+        UIGraphicsImageRenderer(size: CGSize(width: 28, height: 28)).image { _ in
+            let rect = CGRect(x: 0, y: 0, width: 28, height: 28)
+            let circle = UIBezierPath(ovalIn: rect.insetBy(dx: 5, dy: 5))
             UIColor.white.setFill()
-            path.fill()
-            color.setFill()
-            path.fill()
-            UIColor.black.withAlphaComponent(0.15).setStroke()
-            path.lineWidth = 1
-            path.stroke()
+            circle.fill()
+            if let color {
+                color.color.setFill()
+                circle.fill()
+            }
+            UIColor.black.withAlphaComponent(0.18).setStroke()
+            circle.lineWidth = 1
+            circle.stroke()
+            if color == nil {
+                let slash = UIBezierPath()
+                slash.move(to: CGPoint(x: 9, y: 19))
+                slash.addLine(to: CGPoint(x: 19, y: 9))
+                slash.lineWidth = 1.5
+                UIColor.black.withAlphaComponent(0.5).setStroke()
+                slash.stroke()
+            }
+            if selected {
+                let ring = UIBezierPath(ovalIn: rect.insetBy(dx: 1.5, dy: 1.5))
+                ring.lineWidth = 1.5
+                UIColor.black.withAlphaComponent(0.65).setStroke()
+                ring.stroke()
+            }
         }.withRenderingMode(.alwaysOriginal)
     }
 
@@ -948,7 +964,7 @@ final class PaperKeyboardBar: UIInputView {
         button.heightAnchor.constraint(equalToConstant: 44).isActive = true
         button.showsMenuAsPrimaryAction = true
         button.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] completion in
-            completion(self?.textView?.highlightMenu().children ?? [])
+            completion(self?.textView.map { [$0.highlightMenu()] } ?? [])
         }])
         return button
     }

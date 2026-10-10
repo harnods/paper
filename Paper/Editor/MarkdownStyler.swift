@@ -464,6 +464,23 @@ enum HighlightColor: String, CaseIterable {
                 NSRange(location: selection.location + (marker as NSString).length, length: selection.length))
     }
 
+    /// The part of a selection a highlight should cover: one line only, without its line break and
+    /// without hidden syntax (a heading's "## ", other markers) at either edge.
+    static func trimmedSelection(_ selection: NSRange, in storage: NSTextStorage) -> NSRange {
+        let text = storage.string as NSString
+        var sel = selection
+        let line = text.paragraphRange(for: NSRange(location: sel.location, length: 0))
+        var lineEnd = NSMaxRange(line)
+        if lineEnd > line.location, text.character(at: lineEnd - 1) == 10 { lineEnd -= 1 }
+        sel.length = max(0, min(NSMaxRange(sel), lineEnd) - sel.location)
+        func isHidden(_ index: Int) -> Bool {
+            index >= 0 && index < text.length && storage.attribute(.paperHidden, at: index, effectiveRange: nil) != nil
+        }
+        while sel.length > 0, isHidden(sel.location) { sel.location += 1; sel.length -= 1 }
+        while sel.length > 0, isHidden(NSMaxRange(sel) - 1) { sel.length -= 1 }
+        return sel
+    }
+
     /// The highlight color around `selection`, if it's inside one.
     static func current(in text: NSString, selection: NSRange) -> HighlightColor? {
         let line = text.paragraphRange(for: selection)

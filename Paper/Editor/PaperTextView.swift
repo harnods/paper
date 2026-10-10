@@ -289,7 +289,7 @@ final class PaperTextView: NSTextView {
     @objc func toggleStrikeMarkdown(_ sender: Any?) { toggleWrap("~~") }
     /// ⇧⌘H: yellow highlight on, or off if the selection is already highlighted.
     @objc func toggleHighlightMarkdown(_ sender: Any?) {
-        applyHighlight(HighlightColor.current(in: nsString, selection: selectedRange()) == nil ? .yellow : nil)
+        applyHighlight(currentHighlight == nil ? .yellow : nil)
     }
 
     /// From the toolbar's color menu; an item without a color removes the highlight.
@@ -297,15 +297,18 @@ final class PaperTextView: NSTextView {
         applyHighlight((sender.representedObject as? String).flatMap(HighlightColor.init(rawValue:)))
     }
 
-    private func applyHighlight(_ color: HighlightColor?) {
-        guard let edit = HighlightColor.edit(in: nsString, selection: selectedRange(), color: color) else { return }
+    func applyHighlight(_ color: HighlightColor?) {
+        guard let storage = textStorage else { return }
+        let selection = HighlightColor.trimmedSelection(selectedRange(), in: storage)
+        guard let edit = HighlightColor.edit(in: nsString, selection: selection, color: color) else { return }
         replace(edit.range, with: edit.replacement)
         setSelectedRange(edit.selection)
         dismissFormatToolbar()
     }
 
     var currentHighlight: HighlightColor? {
-        HighlightColor.current(in: nsString, selection: selectedRange())
+        guard let storage = textStorage else { return nil }
+        return HighlightColor.current(in: nsString, selection: HighlightColor.trimmedSelection(selectedRange(), in: storage))
     }
 
     private func isHidden(_ index: Int) -> Bool {
@@ -1119,40 +1122,17 @@ final class FormatToolbar: NSView {
         return line
     }
 
-    /// Highlight colors, with the current one ticked, and "Remove highlight" when there is one.
+    /// A row of color dots (the current one ringed), plus a "no highlight" dot when there is one.
     @objc private func showHighlightMenu() {
         guard let textView, let highlightButton else { return }
-        let current = textView.currentHighlight
         let menu = NSMenu()
-        for color in HighlightColor.allCases {
-            let item = NSMenuItem(title: color.label, action: #selector(PaperTextView.setHighlightColor(_:)), keyEquivalent: "")
-            item.target = textView
-            item.representedObject = color.rawValue
-            item.image = Self.swatch(color.color)
-            item.state = color == current ? .on : .off
-            menu.addItem(item)
+        let item = NSMenuItem()
+        item.view = HighlightPalette(current: textView.currentHighlight) { [weak menu, weak textView] color in
+            menu?.cancelTracking()
+            textView?.applyHighlight(color)
         }
-        if current != nil {
-            menu.addItem(.separator())
-            let remove = NSMenuItem(title: "Remove highlight", action: #selector(PaperTextView.setHighlightColor(_:)), keyEquivalent: "")
-            remove.target = textView
-            menu.addItem(remove)
-        }
+        menu.addItem(item)
         _ = menu.popUp(positioning: nil, at: NSPoint(x: 0, y: highlightButton.bounds.maxY + 4), in: highlightButton)
-    }
-
-    private static func swatch(_ color: NSColor) -> NSImage {
-        NSImage(size: NSSize(width: 14, height: 14), flipped: false) { rect in
-            let path = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 3, yRadius: 3)
-            NSColor.white.setFill()
-            path.fill()
-            color.setFill()
-            path.fill()
-            NSColor.black.withAlphaComponent(0.15).setStroke()
-            path.lineWidth = 1
-            path.stroke()
-            return true
-        }
     }
 
     @objc private func showTurnIntoMenu() {
@@ -1166,6 +1146,69 @@ final class FormatToolbar: NSView {
             menu.addItem(item)
         }
         _ = menu.popUp(positioning: nil, at: NSPoint(x: 0, y: turnIntoButton.bounds.maxY + 4), in: turnIntoButton)
+    }
+}
+/// Color dots for the highlight menu. Each dot shows the color as it looks on the paper.
+final class HighlightPalette: NSView {
+    private let onPick: (HighlightColor?) -> Void
+    private let choices: [HighlightColor?]
+    private static let dotSize: CGFloat = 28
+
+    init(current: HighlightColor?, onPick: @escaping (HighlightColor?) -> Void) {
+        self.onPick = onPick
+        let removeChoice: [HighlightColor?] = current == nil ? [] : [nil]
+        choices = HighlightColor.allCases.map { Optional($0) } + removeChoice
+        let padding: CGFloat = 10
+        super.init(frame: NSRect(x: 0, y: 0, width: padding * 2 + CGFloat(choices.count) * Self.dotSize,
+                                 height: Self.dotSize + 12))
+        for (index, choice) in choices.enumerated() {
+            let button = NSButton(image: Self.dot(choice, selected: choice != nil && choice == current),
+                                  target: self, action: #selector(pick(_:)))
+            button.isBordered = false
+            button.imagePosition = .imageOnly
+            button.tag = index
+            button.frame = NSRect(x: padding + CGFloat(index) * Self.dotSize, y: 6, width: Self.dotSize, height: Self.dotSize)
+            button.toolTip = choice?.label ?? "Remove highlight"
+            button.setAccessibilityLabel(choice.map { "\($0.label) highlight" } ?? "Remove highlight")
+            addSubview(button)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    @objc private func pick(_ sender: NSButton) {
+        onPick(choices[sender.tag])
+    }
+
+    /// A filled dot in the highlight color (ringed when it's the current one), or a slashed dot for "none".
+    private static func dot(_ color: HighlightColor?, selected: Bool) -> NSImage {
+        NSImage(size: NSSize(width: dotSize, height: dotSize), flipped: false) { rect in
+            let circle = NSBezierPath(ovalIn: rect.insetBy(dx: 6, dy: 6))
+            NSColor.white.setFill()
+            circle.fill()
+            if let color {
+                color.color.setFill()
+                circle.fill()
+            }
+            NSColor.black.withAlphaComponent(0.18).setStroke()
+            circle.lineWidth = 1
+            circle.stroke()
+            if color == nil {
+                let slash = NSBezierPath()
+                slash.move(to: NSPoint(x: rect.minX + 9, y: rect.minY + 9))
+                slash.line(to: NSPoint(x: rect.maxX - 9, y: rect.maxY - 9))
+                slash.lineWidth = 1.5
+                NSColor.black.withAlphaComponent(0.5).setStroke()
+                slash.stroke()
+            }
+            if selected {
+                let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 2.5, dy: 2.5))
+                ring.lineWidth = 1.5
+                NSColor.black.withAlphaComponent(0.65).setStroke()
+                ring.stroke()
+            }
+            return true
+        }
     }
 }
 #endif
