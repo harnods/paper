@@ -8,6 +8,9 @@ final class PaperTextView: NSTextView {
     /// Selection left by a style action; the toolbar stays closed until the selection changes.
     private var dismissedSelection: NSRange?
     private var hoveredLine: Int?
+    /// The + or drag handle under the pointer, drawn darker on a soft background.
+    private var hoveredControl: BlockControl?
+    private enum BlockControl { case plus, handle }
     private var dropIndicatorY: CGFloat?
     private var isDraggingBlock = false
     var paperMenuItems: (() -> [NSMenuItem])?
@@ -537,7 +540,21 @@ final class PaperTextView: NSTextView {
             NSCursor.pointingHand.set()
             return
         }
+        if let control = blockControl(at: event) {
+            (control == .plus ? NSCursor.pointingHand : NSCursor.openHand).set()
+            return
+        }
         super.cursorUpdate(with: event)
+    }
+
+    /// The + or drag handle of the hovered line under the pointer, if any.
+    private func blockControl(at event: NSEvent) -> BlockControl? {
+        guard !isDraggingBlock, let line = hoveredLine else { return nil }
+        let point = convert(event.locationInWindow, from: nil)
+        let ranges = lineRanges()
+        if let plus = plusRect(forLine: line, ranges: ranges), plus.insetBy(dx: -2, dy: -2).contains(point) { return .plus }
+        if let handle = handleRect(forLine: line, ranges: ranges), handle.insetBy(dx: -2, dy: -2).contains(point) { return .handle }
+        return nil
     }
 
     private func isOverCheckbox(_ event: NSEvent) -> Bool {
@@ -552,18 +569,31 @@ final class PaperTextView: NSTextView {
             NSCursor.pointingHand.set()
             return
         }
-        super.mouseMoved(with: event)
         let point = convert(event.locationInWindow, from: nil)
         let line = lineIndex(atPoint: point)
         if line != hoveredLine {
             hoveredLine = line
             needsDisplay = true
         }
+        let control = blockControl(at: event)
+        if control != hoveredControl {
+            hoveredControl = control
+            toolTip = control == .plus ? "Add a block below" : control == .handle ? "Drag to move" : nil
+            needsDisplay = true
+        }
+        if let control {
+            // Show that the + is clickable and the handle can be grabbed.
+            (control == .plus ? NSCursor.pointingHand : NSCursor.openHand).set()
+            return
+        }
+        super.mouseMoved(with: event)
     }
 
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         hoveredLine = nil
+        hoveredControl = nil
+        toolTip = nil
         needsDisplay = true
     }
 
@@ -775,7 +805,8 @@ final class PaperTextView: NSTextView {
         }
 
         if !isDraggingBlock, let line = hoveredLine, let plus = plusRect(forLine: line, ranges: ranges) {
-            NSColor.black.withAlphaComponent(0.3).setFill()
+            drawControlBackground(plus, isHovered: hoveredControl == .plus)
+            NSColor.black.withAlphaComponent(hoveredControl == .plus ? 0.7 : 0.45).setFill()
             let arm: CGFloat = 5
             NSBezierPath(roundedRect: NSRect(x: plus.midX - arm, y: plus.midY - 0.75, width: arm * 2, height: 1.5),
                          xRadius: 0.75, yRadius: 0.75).fill()
@@ -784,7 +815,8 @@ final class PaperTextView: NSTextView {
         }
 
         if !isDraggingBlock, let line = hoveredLine, let handle = handleRect(forLine: line, ranges: ranges) {
-            NSColor.black.withAlphaComponent(0.25).setFill()
+            drawControlBackground(handle, isHovered: hoveredControl == .handle)
+            NSColor.black.withAlphaComponent(hoveredControl == .handle ? 0.7 : 0.45).setFill()
             let dot: CGFloat = 3
             let gap: CGFloat = 4
             let startX = handle.midX - (dot * 2 + gap) / 2
@@ -797,6 +829,14 @@ final class PaperTextView: NSTextView {
                 }
             }
         }
+    }
+
+    /// Soft rounded background behind the + or handle under the pointer, like a hovered button.
+    private func drawControlBackground(_ rect: NSRect, isHovered: Bool) {
+        guard isHovered else { return }
+        let box = NSRect(x: rect.minX - 1, y: rect.midY - 12, width: rect.width + 2, height: 24)
+        NSColor.black.withAlphaComponent(0.06).setFill()
+        NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).fill()
     }
 
     /// The line box includes extra line spacing below the text; keep the caret to the font's height.
