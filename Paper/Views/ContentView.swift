@@ -49,7 +49,7 @@ struct ContentView: View {
 
                 // Hairline on the paper's edge.
                 RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.1), lineWidth: 1)
+                    .strokeBorder(Color.black.opacity(0.2), lineWidth: 1)
                     .allowsHitTesting(false)
             }
         }
