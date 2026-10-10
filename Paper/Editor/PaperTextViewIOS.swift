@@ -341,7 +341,52 @@ final class PaperTextView: UITextView, UITextViewDelegate {
     @objc func toggleItalicMarkdown() { toggleWrap("*") }
     @objc func toggleCodeMarkdown() { toggleWrap("`") }
     @objc func toggleStrikeMarkdown() { toggleWrap("~~") }
-    @objc func toggleHighlightMarkdown() { toggleWrap("==") }
+    /// Yellow highlight on, or off if the selection is already highlighted.
+    @objc func toggleHighlightMarkdown() {
+        applyHighlight(currentHighlight == nil ? .yellow : nil)
+    }
+
+    var currentHighlight: HighlightColor? {
+        HighlightColor.current(in: nsString, selection: selectedRange)
+    }
+
+    /// Highlights the selection in `color`, changes the color of the highlight it's in, or removes it (nil).
+    func applyHighlight(_ color: HighlightColor?) {
+        guard let edit = HighlightColor.edit(in: nsString, selection: selectedRange, color: color) else { return }
+        replace(edit.range, with: edit.replacement)
+        selectedRange = edit.selection
+    }
+
+    /// Color choices for menus: one item per color, plus "Remove highlight" when there is one.
+    func highlightMenu() -> UIMenu {
+        let current = currentHighlight
+        var items: [UIMenuElement] = HighlightColor.allCases.map { color in
+            UIAction(title: color.label, image: Self.swatch(color.color), state: color == current ? .on : .off) { [weak self] _ in
+                self?.applyHighlight(color)
+            }
+        }
+        if current != nil {
+            items.append(UIMenu(options: .displayInline, children: [
+                UIAction(title: "Remove highlight", image: UIImage(systemName: "xmark")) { [weak self] _ in
+                    self?.applyHighlight(nil)
+                },
+            ]))
+        }
+        return UIMenu(title: "Highlight", image: UIImage(systemName: "highlighter"), children: items)
+    }
+
+    private static func swatch(_ color: UIColor) -> UIImage {
+        UIGraphicsImageRenderer(size: CGSize(width: 18, height: 18)).image { _ in
+            let path = UIBezierPath(roundedRect: CGRect(x: 1, y: 1, width: 16, height: 16), cornerRadius: 4)
+            UIColor.white.setFill()
+            path.fill()
+            color.setFill()
+            path.fill()
+            UIColor.black.withAlphaComponent(0.15).setStroke()
+            path.lineWidth = 1
+            path.stroke()
+        }.withRenderingMode(.alwaysOriginal)
+    }
 
     private func isHidden(_ index: Int) -> Bool {
         guard index >= 0, index < nsString.length else { return false }
@@ -490,7 +535,7 @@ final class PaperTextView: UITextView, UITextViewDelegate {
             UIAction(title: "Italic", image: UIImage(systemName: "italic")) { [weak self] _ in self?.toggleItalicMarkdown() },
             UIAction(title: "Strikethrough", image: UIImage(systemName: "strikethrough")) { [weak self] _ in self?.toggleStrikeMarkdown() },
             UIAction(title: "Code", image: UIImage(systemName: "chevron.left.forwardslash.chevron.right")) { [weak self] _ in self?.toggleCodeMarkdown() },
-            UIAction(title: "Highlight", image: UIImage(systemName: "highlighter")) { [weak self] _ in self?.toggleHighlightMarkdown() },
+            highlightMenu(),
         ])
         return UIMenu(children: [format] + suggestedActions)
     }
@@ -887,9 +932,25 @@ final class PaperKeyboardBar: UIInputView {
             iconButton("italic", "Italic") { $0.toggleItalicMarkdown() },
             iconButton("strikethrough", "Strikethrough") { $0.toggleStrikeMarkdown() },
             iconButton("chevron.left.forwardslash.chevron.right", "Inline code") { $0.toggleCodeMarkdown() },
-            iconButton("highlighter", "Highlight") { $0.toggleHighlightMarkdown() },
+            highlightButton(),
             iconButton("checklist", "To-do list") { $0.setLinePrefix("- [ ] ") },
         ]
+    }
+
+    /// Opens the color choices; built fresh each time so the current color is ticked.
+    private func highlightButton() -> UIButton {
+        let button = UIButton(type: .system)
+        button.setImage(UIImage(systemName: "highlighter", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)),
+                        for: .normal)
+        button.tintColor = .black
+        button.accessibilityLabel = "Highlight color"
+        button.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        button.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        button.showsMenuAsPrimaryAction = true
+        button.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] completion in
+            completion(self?.textView?.highlightMenu().children ?? [])
+        }])
+        return button
     }
 
     private func iconButton(_ symbol: String, _ label: String, _ action: @escaping (PaperTextView) -> Void) -> UIButton {

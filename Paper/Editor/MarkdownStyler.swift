@@ -75,7 +75,6 @@ extension NSAttributedString.Key {
 enum MarkdownStyler {
     static let textColor = PlatformColor.black
     static let placeholderColor = PlatformColor.black.withAlphaComponent(0.25)
-    static let highlightColor = PlatformColor(red: 1.0, green: 0.88, blue: 0.35, alpha: 0.55)
     static let bodySize: CGFloat = 16
     static let bodyLineHeight: CGFloat = 26
     static let blockSpacing: CGFloat = 12
@@ -343,7 +342,9 @@ enum MarkdownStyler {
     private static let italic = try! NSRegularExpression(pattern: "(?<![*\\w])\\*(?=[^*\\s])(.+?)(?<=[^*\\s])\\*(?![*\\w])")
     private static let code = try! NSRegularExpression(pattern: "`([^`\\n]+)`")
     private static let strike = try! NSRegularExpression(pattern: "~~(?=\\S)(.+?)(?<=\\S)~~")
-    private static let highlight = try! NSRegularExpression(pattern: "==(?=\\S)(.+?)(?<=\\S)==")
+    /// "==text==" (yellow) or "=={green}text==". Group 1 is the color name, group 2 the text.
+    static let highlight = try! NSRegularExpression(
+        pattern: "==(?:\\{(" + HighlightColor.allCases.map(\.rawValue).joined(separator: "|") + ")\\})?(?=\\S)(.+?)(?<=\\S)==")
 
     private static func styleInline(_ storage: NSTextStorage, range: NSRange, baseFont: PlatformFont, apply shouldApply: Bool,
                                     result: inout StyleResult) {
@@ -380,8 +381,19 @@ enum MarkdownStyler {
         apply(strike, markerLength: 2) { inner in
             storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: inner)
         }
-        apply(highlight, markerLength: 2) { inner in
-            storage.addAttribute(.backgroundColor, value: highlightColor, range: inner)
+        // The opening marker's length depends on the color ("==" or "=={green}").
+        for match in highlight.matches(in: text, options: [], range: range) {
+            let whole = match.range
+            let inner = match.range(at: 2)
+            if shouldApply {
+                let name = match.range(at: 1).location == NSNotFound ? nil : (text as NSString).substring(with: match.range(at: 1))
+                let color = name.flatMap(HighlightColor.init(rawValue:)) ?? .yellow
+                storage.addAttribute(.backgroundColor, value: color.color, range: inner)
+            }
+            hide(NSRange(location: whole.location, length: inner.location - whole.location), in: storage,
+                 isLinePrefix: false, apply: shouldApply, result: &result)
+            hide(NSRange(location: NSMaxRange(whole) - 2, length: 2), in: storage,
+                 isLinePrefix: false, apply: shouldApply, result: &result)
         }
         apply(code, markerLength: 1) { inner in
             storage.addAttribute(.font, value: PlatformFont.monospacedSystemFont(ofSize: baseFont.pointSize - 1, weight: .regular), range: inner)
@@ -405,5 +417,62 @@ enum MarkdownStyler {
         guard let descriptor = font.fontDescriptor.withSymbolicTraits(traits) else { return font }
         return UIFont(descriptor: descriptor, size: font.pointSize)
         #endif
+    }
+}
+
+/// Highlight colors. Yellow is plain "==text==" (standard Markdown); the others are saved as
+/// "=={green}text==", which other Markdown apps show as plain text.
+enum HighlightColor: String, CaseIterable {
+    case yellow, green, blue, pink, red, gray
+
+    var label: String { rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
+
+    var openingMarker: String { self == .yellow ? "==" : "=={\(rawValue)}" }
+
+    var color: PlatformColor {
+        switch self {
+        case .yellow: PlatformColor(red: 1.0, green: 0.92, blue: 0.5, alpha: 0.55)
+        case .green: PlatformColor(red: 0.55, green: 0.88, blue: 0.55, alpha: 0.45)
+        case .blue: PlatformColor(red: 0.55, green: 0.78, blue: 1.0, alpha: 0.45)
+        case .pink: PlatformColor(red: 1.0, green: 0.66, blue: 0.82, alpha: 0.45)
+        case .red: PlatformColor(red: 1.0, green: 0.55, blue: 0.5, alpha: 0.4)
+        case .gray: PlatformColor(white: 0, alpha: 0.09)
+        }
+    }
+
+    /// The edit that highlights `selection` in `color`, or removes the highlight around it (nil).
+    /// Inside an existing highlight, only its color changes; markers are never stacked.
+    static func edit(in text: NSString, selection: NSRange, color: HighlightColor?)
+        -> (range: NSRange, replacement: String, selection: NSRange)? {
+        let line = text.paragraphRange(for: selection)
+        for match in MarkdownStyler.highlight.matches(in: text as String, options: [], range: line) {
+            let whole = match.range
+            guard selection.location >= whole.location, NSMaxRange(selection) <= NSMaxRange(whole) else { continue }
+            let inner = match.range(at: 2)
+            let opening = NSRange(location: whole.location, length: inner.location - whole.location)
+            guard let color else {
+                return (whole, text.substring(with: inner), NSRange(location: whole.location, length: inner.length))
+            }
+            let marker = color.openingMarker
+            let shift = (marker as NSString).length - opening.length
+            return (opening, marker, NSRange(location: inner.location + shift, length: inner.length))
+        }
+        guard let color, selection.length > 0 else { return nil }
+        let marker = color.openingMarker
+        let selected = text.substring(with: selection)
+        return (selection, marker + selected + "==",
+                NSRange(location: selection.location + (marker as NSString).length, length: selection.length))
+    }
+
+    /// The highlight color around `selection`, if it's inside one.
+    static func current(in text: NSString, selection: NSRange) -> HighlightColor? {
+        let line = text.paragraphRange(for: selection)
+        for match in MarkdownStyler.highlight.matches(in: text as String, options: [], range: line) {
+            let whole = match.range
+            guard selection.location >= whole.location, NSMaxRange(selection) <= NSMaxRange(whole) else { continue }
+            if match.range(at: 1).location == NSNotFound { return .yellow }
+            return HighlightColor(rawValue: text.substring(with: match.range(at: 1))) ?? .yellow
+        }
+        return nil
     }
 }

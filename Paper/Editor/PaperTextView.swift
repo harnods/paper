@@ -287,7 +287,26 @@ final class PaperTextView: NSTextView {
     @objc func toggleItalicMarkdown(_ sender: Any?) { toggleWrap("*") }
     @objc func toggleCodeMarkdown(_ sender: Any?) { toggleWrap("`") }
     @objc func toggleStrikeMarkdown(_ sender: Any?) { toggleWrap("~~") }
-    @objc func toggleHighlightMarkdown(_ sender: Any?) { toggleWrap("==") }
+    /// ⇧⌘H: yellow highlight on, or off if the selection is already highlighted.
+    @objc func toggleHighlightMarkdown(_ sender: Any?) {
+        applyHighlight(HighlightColor.current(in: nsString, selection: selectedRange()) == nil ? .yellow : nil)
+    }
+
+    /// From the toolbar's color menu; an item without a color removes the highlight.
+    @objc func setHighlightColor(_ sender: NSMenuItem) {
+        applyHighlight((sender.representedObject as? String).flatMap(HighlightColor.init(rawValue:)))
+    }
+
+    private func applyHighlight(_ color: HighlightColor?) {
+        guard let edit = HighlightColor.edit(in: nsString, selection: selectedRange(), color: color) else { return }
+        replace(edit.range, with: edit.replacement)
+        setSelectedRange(edit.selection)
+        dismissFormatToolbar()
+    }
+
+    var currentHighlight: HighlightColor? {
+        HighlightColor.current(in: nsString, selection: selectedRange())
+    }
 
     private func isHidden(_ index: Int) -> Bool {
         guard index >= 0, index < nsString.length else { return false }
@@ -989,6 +1008,7 @@ final class FormatToolbar: NSView {
     private let turnIntoButton = ToolbarButton(title: "", target: nil, action: nil)
     private let turnIntoLabel = NSTextField(labelWithString: "Text")
     private let stack = NSStackView()
+    private var highlightButton: NSButton?
 
     private static let blockTypes: [(String, Selector)] = [
         ("Text", #selector(PaperTextView.setLineText(_:))),
@@ -1055,8 +1075,9 @@ final class FormatToolbar: NSView {
                                             #selector(PaperTextView.toggleStrikeMarkdown(_:))))
         stack.addArrangedSubview(iconButton("chevron.left.forwardslash.chevron.right", "Inline code  ⌘E",
                                             #selector(PaperTextView.toggleCodeMarkdown(_:))))
-        stack.addArrangedSubview(iconButton("highlighter", "Highlight  ⇧⌘H",
-                                            #selector(PaperTextView.toggleHighlightMarkdown(_:))))
+        highlightButton = iconButton("highlighter", "Highlight color", #selector(showHighlightMenu))
+        highlightButton?.target = self
+        if let highlightButton { stack.addArrangedSubview(highlightButton) }
         addSubview(stack)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -1096,6 +1117,42 @@ final class FormatToolbar: NSView {
         line.widthAnchor.constraint(equalToConstant: 1).isActive = true
         line.heightAnchor.constraint(equalToConstant: 16).isActive = true
         return line
+    }
+
+    /// Highlight colors, with the current one ticked, and "Remove highlight" when there is one.
+    @objc private func showHighlightMenu() {
+        guard let textView, let highlightButton else { return }
+        let current = textView.currentHighlight
+        let menu = NSMenu()
+        for color in HighlightColor.allCases {
+            let item = NSMenuItem(title: color.label, action: #selector(PaperTextView.setHighlightColor(_:)), keyEquivalent: "")
+            item.target = textView
+            item.representedObject = color.rawValue
+            item.image = Self.swatch(color.color)
+            item.state = color == current ? .on : .off
+            menu.addItem(item)
+        }
+        if current != nil {
+            menu.addItem(.separator())
+            let remove = NSMenuItem(title: "Remove highlight", action: #selector(PaperTextView.setHighlightColor(_:)), keyEquivalent: "")
+            remove.target = textView
+            menu.addItem(remove)
+        }
+        _ = menu.popUp(positioning: nil, at: NSPoint(x: 0, y: highlightButton.bounds.maxY + 4), in: highlightButton)
+    }
+
+    private static func swatch(_ color: NSColor) -> NSImage {
+        NSImage(size: NSSize(width: 14, height: 14), flipped: false) { rect in
+            let path = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 3, yRadius: 3)
+            NSColor.white.setFill()
+            path.fill()
+            color.setFill()
+            path.fill()
+            NSColor.black.withAlphaComponent(0.15).setStroke()
+            path.lineWidth = 1
+            path.stroke()
+            return true
+        }
     }
 
     @objc private func showTurnIntoMenu() {

@@ -709,6 +709,9 @@ struct PaperThumbnail: View {
                 let info = MarkdownStyler.parse(text, isFirst: false)
                 if info.kind == .divider { return "—" }
                 var body = String((text as NSString).substring(from: min(info.markerLength, (text as NSString).length)))
+                for color in HighlightColor.allCases where color != .yellow {
+                    body = body.replacingOccurrences(of: color.openingMarker, with: "")
+                }
                 for marker in ["**", "~~", "==", "`", "*"] {
                     body = body.replacingOccurrences(of: marker, with: "")
                 }
