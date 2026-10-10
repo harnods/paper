@@ -14,7 +14,7 @@ struct PaperApp: App {
         }
         .modelContainer(container)
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: PaperLayout.paperSize.width, height: PaperLayout.paperSize.height)
+        .defaultSize(width: PaperLayout.windowSize.width, height: PaperLayout.windowSize.height)
         .defaultPosition(.center)
         .commands { PaperCommands(store: store) }
 
@@ -123,9 +123,9 @@ struct TransparentWindow: NSViewRepresentable {
             window.styleMask.remove(.resizable)
             window.styleMask.insert(.fullSizeContentView)
             window.tabbingMode = .disallowed
-            // AppKit owns the size: the whole window, title bar area included, is exactly the paper,
-            // and the content simply fills it. (Letting SwiftUI size it left a transparent strip.)
-            let size = PaperLayout.paperSize
+            // AppKit owns the size: the whole window, title bar area included, is the paper plus its
+            // shadow margin, and the content simply fills it. (Letting SwiftUI size it left a strip.)
+            let size = PaperLayout.windowSize
             window.minSize = size
             window.maxSize = size
             window.setFrame(NSRect(origin: window.frame.origin, size: size), display: true)

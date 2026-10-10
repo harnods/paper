@@ -3,10 +3,14 @@ import SwiftData
 import UniformTypeIdentifiers
 
 enum PaperLayout {
-    /// The window is exactly the paper, so system highlights (Mission Control, App Exposé) hug it;
-    /// the shadow comes from the window itself, which follows the paper's rounded shape.
+    /// The paper, with a clear margin around it for its own soft shadow.
     static let paperSize = CGSize(width: 660, height: 830)
     static let cornerRadius: CGFloat = 28
+    /// Clear space around the paper for its soft shadow. The macOS window shadow isn't used: it adds
+    /// an edge line with the system's corner radius, which doesn't match the paper's.
+    static let shadowMargin: CGFloat = 24
+    static let windowSize = CGSize(width: paperSize.width + shadowMargin * 2,
+                                   height: paperSize.height + shadowMargin * 2)
 }
 
 struct PaperDocumentKey: FocusedValueKey {
@@ -41,6 +45,7 @@ struct ContentView: View {
             if let doc = store.document(for: paperID) {
                 RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous)
                     .fill(Color.white)
+                    .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
 
                 MarkdownEditor(document: doc, style: doc.paperStyle, store: store, actions: actions(for: doc))
                     .id(doc.persistentModelID)
@@ -53,7 +58,9 @@ struct ContentView: View {
                     .allowsHitTesting(false)
             }
         }
-        // Fill the whole window, title bar area included; AppKit sizes the window to the paper.
+        .frame(width: PaperLayout.paperSize.width, height: PaperLayout.paperSize.height)
+        // Fill the whole window, title bar area included; the paper sits in the middle with room
+        // around it for the shadow. AppKit sizes the window.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()
         .background(PaperWindowRegistrar(paperID: paperID))
