@@ -112,8 +112,9 @@ struct TransparentWindow: NSViewRepresentable {
             guard let window = view.window else { return }
             window.isOpaque = false
             window.backgroundColor = .clear
-            // The window's own shadow follows the paper's rounded shape and sits outside the window.
-            window.hasShadow = true
+            // No window shadow: it adds its own edge line with the system's corner radius, which
+            // doesn't match the paper's. The paper draws its own border instead.
+            window.hasShadow = false
             window.appearance = NSAppearance(named: .aqua)
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
@@ -133,8 +134,6 @@ struct TransparentWindow: NSViewRepresentable {
             }
             // Every paper opens in the middle of the screen, new or reopened.
             window.center()
-            // The shadow is traced from what's drawn, so retrace it once the paper is on screen.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { window.invalidateShadow() }
         }
         return view
     }
