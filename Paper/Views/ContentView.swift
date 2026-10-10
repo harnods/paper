@@ -1,145 +1,219 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
-struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Document.updatedAt, order: .reverse) private var documents: [Document]
-    @State private var selectedDocument: Document?
-    @State private var showDocumentList = false
+enum PaperLayout {
+    /// The paper, with a clear margin around it for its own soft shadow.
+    static let paperSize = CGSize(width: 660, height: 830)
+    static let cornerRadius: CGFloat = 28
+    /// Clear space around the paper for its soft shadow. The macOS window shadow isn't used: it adds
+    /// an edge line with the system's corner radius, which doesn't match the paper's.
+    static let shadowMargin: CGFloat = 24
+    static let windowSize = CGSize(width: paperSize.width + shadowMargin * 2,
+                                   height: paperSize.height + shadowMargin * 2)
+}
 
-    var body: some View {
-        ZStack {
-            WallpaperView()
+struct PaperDocumentKey: FocusedValueKey {
+    typealias Value = Document
+}
 
-            if documents.isEmpty {
-                emptyState
-            } else {
-                paperStack
-            }
-        }
-        .onAppear {
-            if documents.isEmpty {
-                createNewDocument()
-            } else {
-                selectedDocument = documents.first
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            controlsOverlay
-        }
-        .overlay(alignment: .topLeading) {
-            documentListButton
-        }
-        .sheet(isPresented: $showDocumentList) {
-            DocumentListView(
-                documents: documents,
-                selectedDocument: $selectedDocument,
-                onNew: createNewDocument,
-                onDelete: deleteDocument
-            )
-        }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "doc.text")
-                .font(.system(size: 48, weight: .thin))
-                .foregroundStyle(.secondary)
-            Text("No papers yet")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-            Button("New paper") {
-                createNewDocument()
-            }
-            .buttonStyle(.bordered)
-        }
-    }
-
-    private var paperStack: some View {
-        ZStack {
-            ForEach(Array(documents.prefix(3).enumerated().reversed()), id: \.element.id) { index, doc in
-                if index > 0 {
-                    PaperView(
-                        document: .constant(doc),
-                        isActive: false
-                    )
-                    .offset(y: CGFloat(index) * 6)
-                    .scaleEffect(1.0 - CGFloat(index) * 0.02)
-                    .opacity(1.0 - Double(index) * 0.15)
-                    .allowsHitTesting(false)
-                }
-            }
-
-            if let selected = selectedDocument ?? documents.first {
-                PaperView(
-                    document: binding(for: selected),
-                    isActive: true
-                )
-                .transition(.opacity)
-            }
-        }
-        .animation(.easeInOut(duration: 0.3), value: selectedDocument?.id)
-    }
-
-    private var controlsOverlay: some View {
-        HStack(spacing: 12) {
-            if let doc = selectedDocument {
-                PaperStylePicker(style: Binding(
-                    get: { doc.paperStyle },
-                    set: { doc.paperStyle = $0 }
-                ))
-            }
-
-            Button(action: createNewDocument) {
-                Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 32, height: 32)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(24)
-    }
-
-    private var documentListButton: some View {
-        Group {
-            if documents.count > 1 {
-                Button(action: { showDocumentList = true }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "doc.on.doc")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("\(documents.count)")
-                            .font(.system(size: 13, weight: .medium))
-                    }
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .padding(24)
-            }
-        }
-    }
-
-    private func binding(for document: Document) -> Binding<Document> {
-        Binding(
-            get: { document },
-            set: { _ in }
-        )
-    }
-
-    private func createNewDocument() {
-        let doc = Document(title: "", content: "")
-        modelContext.insert(doc)
-        selectedDocument = doc
-    }
-
-    private func deleteDocument(_ doc: Document) {
-        if selectedDocument?.id == doc.id {
-            selectedDocument = documents.first(where: { $0.id != doc.id })
-        }
-        modelContext.delete(doc)
+extension FocusedValues {
+    /// The paper in the key window, for menu commands.
+    var paperDocument: Document? {
+        get { self[PaperDocumentKey.self] }
+        set { self[PaperDocumentKey.self] = newValue }
     }
 }
+
+/// Window-level actions the editor's right-click menu can trigger.
+struct PaperActions {
+    var newPaper: () -> Void
+    var viewAllPapers: () -> Void
+    var delete: () -> Void
+}
+
+/// One window showing one paper.
+struct ContentView: View {
+    let store: PaperStore
+    @Binding var paperID: PersistentIdentifier?
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        #if os(macOS)
+        ZStack {
+            if let doc = store.document(for: paperID) {
+                RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous)
+                    .fill(Color.white)
+                    .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+
+                MarkdownEditor(document: doc, style: doc.paperStyle, store: store, actions: actions(for: doc))
+                    .id(doc.persistentModelID)
+                    .clipShape(RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous))
+                    .focusedSceneValue(\.paperDocument, doc)
+
+                // Hairline on the paper's edge.
+                RoundedRectangle(cornerRadius: PaperLayout.cornerRadius, style: .continuous)
+                    .strokeBorder(Color.black.opacity(0.35), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+        }
+        .frame(width: PaperLayout.paperSize.width, height: PaperLayout.paperSize.height)
+        // Fill the whole window, title bar area included; the paper sits in the middle with room
+        // around it for the shadow. AppKit sizes the window.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
+        .background(PaperWindowRegistrar(paperID: paperID))
+        .preferredColorScheme(.light)
+        .onAppear {
+            if paperID == nil { paperID = store.defaultPaperID() }
+        }
+        .onChange(of: store.documents.count) { _, _ in
+            if paperID != nil, store.document(for: paperID) == nil { dismiss() }
+        }
+        .onChange(of: store.pendingOpen) { _, id in
+            guard let id else { return }
+            store.pendingOpen = nil
+            openWindow(value: id)
+        }
+        #else
+        PaperLibraryView(store: store)
+        #endif
+    }
+
+    #if os(macOS)
+    private func actions(for doc: Document) -> PaperActions {
+        PaperActions(
+            newPaper: { openWindow(value: store.newPaper(style: doc.paperStyle)) },
+            viewAllPapers: { AllPapersOverlay.show(store: store) { openWindow(value: $0) } },
+            delete: { store.delete(doc) }
+        )
+    }
+    #endif
+}
+
+#if os(iOS)
+/// iPhone: connect the iCloud Drive "Paper" folder once, then browse folders and papers.
+struct PaperLibraryView: View {
+    let store: PaperStore
+    @State private var choosingFolder = false
+
+    var body: some View {
+        Group {
+            if store.folderURL == nil {
+                connectFolder
+            } else {
+                NavigationStack {
+                    PaperListView(store: store, folderID: nil)
+                }
+            }
+        }
+        .preferredColorScheme(.light)
+        .fileImporter(isPresented: $choosingFolder, allowedContentTypes: [.folder]) { result in
+            if case .success(let url) = result { store.chooseFolder(url) }
+        }
+    }
+
+    private var connectFolder: some View {
+        VStack(spacing: 16) {
+            Text("Connect your papers")
+                .font(.system(size: 24, weight: .semibold))
+            Text("Open Paper on your Mac first. It makes a folder called Paper in iCloud Drive. Then choose that folder here.")
+                .font(.system(size: 16))
+                .foregroundStyle(Color.black.opacity(0.6))
+                .multilineTextAlignment(.center)
+            Button("Choose Paper folder") { choosingFolder = true }
+                .buttonStyle(.borderedProminent)
+                .tint(.black)
+                .padding(.top, 8)
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.white)
+    }
+}
+
+struct PaperListView: View {
+    let store: PaperStore
+    let folderID: String?
+    @State private var newPaper: Document?
+
+    var body: some View {
+        List {
+            ForEach(store.folders(in: folderID), id: \.folderID) { folder in
+                NavigationLink {
+                    PaperListView(store: store, folderID: folder.folderID)
+                } label: {
+                    Label(folder.name, systemImage: "folder")
+                }
+            }
+            ForEach(store.papers(in: folderID), id: \.persistentModelID) { paper in
+                NavigationLink {
+                    PaperEditorScreen(document: paper, store: store)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(paper.title.isEmpty ? "Untitled" : paper.title)
+                        Text(paper.updatedAt, format: .relative(presentation: .named))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .onDelete { offsets in
+                let papers = store.papers(in: folderID)
+                for index in offsets { store.delete(papers[index]) }
+            }
+        }
+        .navigationTitle(store.folder(for: folderID)?.name ?? "All papers")
+        .refreshable { store.syncFiles() }
+        .toolbar {
+            Button("New paper", systemImage: "square.and.pencil") {
+                let id = store.newPaper()
+                if let paper = store.document(for: id) {
+                    store.move(paper, to: folderID)
+                    newPaper = paper
+                }
+            }
+        }
+        .navigationDestination(item: $newPaper) { paper in
+            PaperEditorScreen(document: paper, store: store)
+        }
+    }
+}
+
+/// One paper, full screen, with the same editor as the Mac.
+struct PaperEditorScreen: View {
+    let document: Document
+    let store: PaperStore
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        PaperEditorView(document: document, store: store)
+            .id(document.persistentModelID)
+            .ignoresSafeArea(.container, edges: .bottom)
+            .background(Color.white)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color.white, for: .navigationBar)
+            .toolbar {
+                Menu {
+                    Picker("Paper style", selection: Binding(
+                        get: { document.paperStyle },
+                        set: { store.setStyle($0, for: document) }
+                    )) {
+                        ForEach(PaperStyle.allCases) { style in
+                            Text(style.label).tag(style)
+                        }
+                    }
+                    Button("Delete paper", systemImage: "trash", role: .destructive) {
+                        dismiss()
+                        // Let the editor close (and save) before the paper goes away.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { store.delete(document) }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .tint(.black)
+            }
+    }
+}
+#endif
